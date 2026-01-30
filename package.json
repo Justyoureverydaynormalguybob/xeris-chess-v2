@@ -1,0 +1,21 @@
+{
+  "name": "xeris-chess",
+  "version": "2.0.0",
+  "description": "Xeris Chess - Play for XRS cryptocurrency",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "wallet": "node wallet.js",
+    "wallet:generate": "node wallet.js generate",
+    "wallet:show": "node wallet.js show"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "ws": "^8.14.2",
+    "chess.js": "^1.0.0-beta.6",
+    "tweetnacl": "^1.0.3",
+    "bs58": "^5.0.0"
+  }
+}
