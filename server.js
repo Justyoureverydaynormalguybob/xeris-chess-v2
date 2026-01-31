@@ -13,7 +13,9 @@ const { Chess } = require('chess.js');
 
 // Config
 const PORT = process.env.PORT || 3001;
-const BET_AMOUNT = 100;
+const DEFAULT_BET_AMOUNT = 100;
+const MIN_BET = 10;
+const MAX_BET = 100000;
 const FEE_PERCENT = 1;
 const WINNER_PERCENT = 99;
 const DEV_WALLET = process.env.DEV_WALLET || null;
@@ -100,14 +102,14 @@ function createUser(wallet, username) {
     return users[wallet];
 }
 
-function updateUserStats(wallet, won, prize = 0) {
+function updateUserStats(wallet, won, prize = 0, betAmount = DEFAULT_BET_AMOUNT) {
     if (!users[wallet]) return;
     if (won) {
         users[wallet].wins++;
         users[wallet].earnings += prize;
     } else {
         users[wallet].losses++;
-        users[wallet].earnings -= BET_AMOUNT;
+        users[wallet].earnings -= betAmount;
     }
     saveUsers();
 }
@@ -143,8 +145,8 @@ loadStats();
 // State
 const players = new Map();
 const games = new Map();
-const challenges = new Map(); // challengeId -> { from, to, timestamp }
-let waitingPlayer = null;
+const challenges = new Map(); // challengeId -> { from, to, timestamp, bet }
+const waitingPlayers = new Map(); // bet amount -> playerId
 let gameCounter = 0;
 let challengeCounter = 0;
 
@@ -354,7 +356,7 @@ async function findDepositTransaction(playerWallet, minAmount) {
 const confirmedDeposits = new Map(); // "gameId:playerId" -> slot number
 
 // Check for incoming deposit from specific player
-async function checkDeposit(gameId, playerId, playerWallet) {
+async function checkDeposit(gameId, playerId, playerWallet, betAmount = DEFAULT_BET_AMOUNT) {
     const depositKey = `${gameId}:${playerId}`;
     
     // Already confirmed this deposit?
@@ -363,7 +365,7 @@ async function checkDeposit(gameId, playerId, playerWallet) {
     }
     
     // Search for transaction from player to escrow
-    const tx = await findDepositTransaction(playerWallet, BET_AMOUNT);
+    const tx = await findDepositTransaction(playerWallet, betAmount);
     
     if (tx) {
         // Mark as confirmed so we don't count it again
@@ -540,7 +542,7 @@ const server = http.createServer((req, res) => {
     // API endpoints
     if (req.url === '/api/escrow') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ address: escrowWallet.address, bet: BET_AMOUNT }));
+        res.end(JSON.stringify({ address: escrowWallet.address, defaultBet: DEFAULT_BET_AMOUNT, minBet: MIN_BET, maxBet: MAX_BET }));
         return;
     }
     
@@ -609,7 +611,7 @@ wss.on('connection', (ws) => {
     });
     
     console.log(`[+] ${playerId} connected`);
-    send(ws, { type: 'connected', playerId, escrow: escrowWallet.address, bet: BET_AMOUNT });
+    send(ws, { type: 'connected', playerId, escrow: escrowWallet.address, defaultBet: DEFAULT_BET_AMOUNT, minBet: MIN_BET, maxBet: MAX_BET });
     
     ws.on('message', (data) => {
         try {
@@ -683,11 +685,13 @@ async function handleMessage(playerId, msg) {
                 send(player.ws, { type: 'error', message: 'Connect wallet first' });
                 return;
             }
-            await findGame(playerId);
+            const bet = Math.min(MAX_BET, Math.max(MIN_BET, parseInt(msg.bet) || DEFAULT_BET_AMOUNT));
+            await findGame(playerId, bet);
             break;
             
         case 'challenge':
-            handleChallenge(playerId, msg.targetId);
+            const challengeBet = Math.min(MAX_BET, Math.max(MIN_BET, parseInt(msg.bet) || DEFAULT_BET_AMOUNT));
+            handleChallenge(playerId, msg.targetId, challengeBet);
             break;
             
         case 'accept_challenge':
@@ -711,10 +715,14 @@ async function handleMessage(playerId, msg) {
             break;
             
         case 'cancel_search':
-            if (waitingPlayer === playerId) {
-                waitingPlayer = null;
-                send(player.ws, { type: 'search_cancelled' });
+            // Remove from all waiting pools
+            for (const [bet, pid] of waitingPlayers) {
+                if (pid === playerId) {
+                    waitingPlayers.delete(bet);
+                    break;
+                }
             }
+            send(player.ws, { type: 'search_cancelled' });
             // Also cancel any pending challenges
             for (const [cid, c] of challenges) {
                 if (c.from === playerId || c.to === playerId) {
@@ -782,7 +790,7 @@ function broadcastLobby() {
 }
 
 // Challenge functions
-function handleChallenge(fromId, toId) {
+function handleChallenge(fromId, toId, bet) {
     const from = players.get(fromId);
     const to = players.get(toId);
     
@@ -797,16 +805,17 @@ function handleChallenge(fromId, toId) {
     }
     
     const challengeId = 'c' + (++challengeCounter);
-    challenges.set(challengeId, { from: fromId, to: toId, timestamp: Date.now() });
+    challenges.set(challengeId, { from: fromId, to: toId, timestamp: Date.now(), bet });
     
     send(to.ws, {
         type: 'challenge_received',
         challengeId,
         fromUsername: from.username,
-        fromId
+        fromId,
+        bet
     });
     
-    console.log(`[CHALLENGE] ${from.username} -> ${to.username}`);
+    console.log(`[CHALLENGE] ${from.username} -> ${to.username} (${bet} XRS)`);
 }
 
 function handleAcceptChallenge(playerId, challengeId) {
@@ -815,8 +824,8 @@ function handleAcceptChallenge(playerId, challengeId) {
     
     challenges.delete(challengeId);
     
-    // Create game between challenger and accepter
-    createGame(challenge.from, challenge.to);
+    // Create game between challenger and accepter with the challenge bet
+    createGame(challenge.from, challenge.to, challenge.bet);
 }
 
 function handleDeclineChallenge(playerId, challengeId) {
@@ -836,7 +845,7 @@ function handleDeclineChallenge(playerId, challengeId) {
 }
 
 // Create game between two players
-function createGame(whiteId, blackId) {
+function createGame(whiteId, blackId, bet = DEFAULT_BET_AMOUNT) {
     const white = players.get(whiteId);
     const black = players.get(blackId);
     
@@ -864,7 +873,8 @@ function createGame(whiteId, blackId) {
         whiteDeposit: false,
         blackDeposit: false,
         started: false,
-        pot: 0
+        pot: 0,
+        bet: bet // Store bet amount per game
     });
     
     whitePlayer.gameId = gameId;
@@ -880,37 +890,40 @@ function createGame(whiteId, blackId) {
         type: 'deposit_required',
         gameId,
         escrow: escrowWallet.address,
-        amount: BET_AMOUNT
+        amount: bet
     };
     
     send(whitePlayer.ws, { ...depositInfo, color: 'white', opponentUsername: blackPlayer.username });
     send(blackPlayer.ws, { ...depositInfo, color: 'black', opponentUsername: whitePlayer.username });
     
-    console.log(`[MATCH] ${gameId}: ${whitePlayer.username} (W) vs ${blackPlayer.username} (B)`);
+    console.log(`[MATCH] ${gameId}: ${whitePlayer.username} (W) vs ${blackPlayer.username} (B) - ${bet} XRS`);
     broadcastLobby();
 }
 
-async function findGame(playerId) {
+async function findGame(playerId, bet = DEFAULT_BET_AMOUNT) {
     const player = players.get(playerId);
     if (!player || player.gameId) return;
     
-    if (waitingPlayer && waitingPlayer !== playerId) {
-        const opponent = players.get(waitingPlayer);
+    // Check if someone is waiting at this bet amount
+    const waitingId = waitingPlayers.get(bet);
+    
+    if (waitingId && waitingId !== playerId) {
+        const opponent = players.get(waitingId);
         if (!opponent || !opponent.wallet || !opponent.username) {
-            waitingPlayer = playerId;
+            // Invalid opponent, replace them
+            waitingPlayers.set(bet, playerId);
             send(player.ws, { type: 'waiting' });
             return;
         }
         
-        // Match found
-        const opponentId = waitingPlayer;
-        waitingPlayer = null;
-        
-        createGame(playerId, opponentId);
+        // Match found at same bet level
+        waitingPlayers.delete(bet);
+        createGame(playerId, waitingId, bet);
     } else {
-        waitingPlayer = playerId;
+        // Add to waiting pool for this bet amount
+        waitingPlayers.set(bet, playerId);
         send(player.ws, { type: 'waiting' });
-        console.log(`[WAIT] ${player.username || playerId}`);
+        console.log(`[WAIT] ${player.username || playerId} (${bet} XRS)`);
     }
 }
 
@@ -920,6 +933,8 @@ async function verifyDeposit(playerId) {
     
     const game = games.get(player.gameId);
     if (!game || game.started) return;
+    
+    const betAmount = game.bet || DEFAULT_BET_AMOUNT;
     
     // Check if this player already deposited
     if (player.deposited) {
@@ -935,7 +950,7 @@ async function verifyDeposit(playerId) {
         hasDeposit = true;
     } else {
         // Real blockchain verification - search for transaction from player to escrow
-        hasDeposit = await checkDeposit(player.gameId, playerId, player.wallet);
+        hasDeposit = await checkDeposit(player.gameId, playerId, player.wallet, betAmount);
     }
     
     if (hasDeposit) {
@@ -945,10 +960,10 @@ async function verifyDeposit(playerId) {
         } else {
             game.blackDeposit = true;
         }
-        game.pot += BET_AMOUNT;
+        game.pot += betAmount;
         
         send(player.ws, { type: 'deposit_confirmed' });
-        console.log(`[DEPOSIT] ${playerId} (${player.wallet.slice(0,8)}...) confirmed (${BET_AMOUNT} XRS) - Pot: ${game.pot} XRS`);
+        console.log(`[DEPOSIT] ${playerId} (${player.wallet.slice(0,8)}...) confirmed (${betAmount} XRS) - Pot: ${game.pot} XRS`);
         
         // Check if both deposited
         if (game.whiteDeposit && game.blackDeposit) {
@@ -964,7 +979,7 @@ async function verifyDeposit(playerId) {
     } else {
         send(player.ws, { 
             type: 'deposit_not_found', 
-            message: `No deposit found from your wallet. Send exactly ${BET_AMOUNT} XRS to the escrow address and try again.`
+            message: `No deposit found from your wallet. Send exactly ${betAmount} XRS to the escrow address and try again.`
         });
     }
 }
@@ -1047,7 +1062,13 @@ function handleResign(playerId) {
 }
 
 function handleDisconnect(playerId) {
-    if (waitingPlayer === playerId) waitingPlayer = null;
+    // Remove from all waiting pools
+    for (const [bet, pid] of waitingPlayers) {
+        if (pid === playerId) {
+            waitingPlayers.delete(bet);
+            break;
+        }
+    }
     
     const player = players.get(playerId);
     if (player?.gameId) {
@@ -1066,6 +1087,7 @@ async function refundDeposits(gameId, reason) {
     const game = games.get(gameId);
     if (!game) return;
     
+    const betAmount = game.bet || DEFAULT_BET_AMOUNT;
     const endData = { type: 'game_cancelled', reason };
     
     for (const id of [game.white, game.black]) {
@@ -1073,7 +1095,7 @@ async function refundDeposits(gameId, reason) {
         if (p) {
             send(p.ws, endData);
             if (p.deposited && p.wallet) {
-                await sendPayout(p.wallet, BET_AMOUNT, 'refund');
+                await sendPayout(p.wallet, betAmount, 'refund');
             }
             p.gameId = null;
             p.color = null;
@@ -1105,6 +1127,7 @@ async function endGame(gameId, result, reason) {
     const game = games.get(gameId);
     if (!game) return;
     
+    const betAmount = game.bet || DEFAULT_BET_AMOUNT;
     const winnerPrize = Math.floor(game.pot * WINNER_PERCENT / 100);
     const fee = game.pot - winnerPrize;
     
@@ -1116,13 +1139,13 @@ async function endGame(gameId, result, reason) {
     if (result === 'white') {
         winnerWallet = game.whiteWallet;
         loserWallet = game.blackWallet;
-        updateUserStats(game.whiteWallet, true, winnerPrize);
-        updateUserStats(game.blackWallet, false, 0);
+        updateUserStats(game.whiteWallet, true, winnerPrize, betAmount);
+        updateUserStats(game.blackWallet, false, 0, betAmount);
     } else if (result === 'black') {
         winnerWallet = game.blackWallet;
         loserWallet = game.whiteWallet;
-        updateUserStats(game.blackWallet, true, winnerPrize);
-        updateUserStats(game.whiteWallet, false, 0);
+        updateUserStats(game.blackWallet, true, winnerPrize, betAmount);
+        updateUserStats(game.whiteWallet, false, 0, betAmount);
     }
     
     // Send payout
@@ -1147,6 +1170,7 @@ async function endGame(gameId, result, reason) {
         winner: result,
         reason,
         pot: game.pot,
+        bet: betAmount,
         prize: result === 'draw' ? Math.floor(game.pot / 2) : winnerPrize,
         payoutSuccess
     };
@@ -1176,7 +1200,7 @@ async function startup() {
 ╔════════════════════════════════════════════════════════╗
 ║          ♟️  XERIS CHESS v2 - XRS BETTING  ♟️           ║
 ║                                                        ║
-║  Bet: ${BET_AMOUNT} XRS | Winner: ${WINNER_PERCENT}% | Fee: ${FEE_PERCENT}%                   ║
+║  Bets: ${MIN_BET}-${MAX_BET} XRS | Winner: ${WINNER_PERCENT}% | Fee: ${FEE_PERCENT}%            ║
 ╠════════════════════════════════════════════════════════╣
 ║  ${modeText}
 ╠════════════════════════════════════════════════════════╣
@@ -1188,7 +1212,7 @@ async function startup() {
 ╚════════════════════════════════════════════════════════╝
     `);
     
-    if (!DEV_MODE && balance < BET_AMOUNT * 2) {
+    if (!DEV_MODE && balance < DEFAULT_BET_AMOUNT * 2) {
         console.log(`[WARN] Low escrow balance! Send XRS to: ${escrowWallet.address}`);
     }
 }

@@ -617,6 +617,66 @@
             border-radius: 12px;
             padding: 4px;
         }
+        
+        /* BET SELECTOR */
+        .bet-selector {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin: 12px 0;
+        }
+        .bet-btn {
+            padding: 12px 16px;
+            font-family: 'Orbitron', monospace;
+            font-size: 14px;
+            font-weight: 700;
+            background: var(--dark-2);
+            border: 2px solid var(--dark-4);
+            border-radius: 10px;
+            color: #888;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: auto;
+            min-width: 60px;
+        }
+        .bet-btn:hover {
+            border-color: var(--gold);
+            color: var(--gold);
+        }
+        .bet-btn.active {
+            background: linear-gradient(135deg, var(--gold-dark), var(--gold));
+            border-color: var(--gold);
+            color: var(--dark-1);
+            box-shadow: 0 4px 15px rgba(247,147,26,0.4);
+        }
+        .selected-bet {
+            text-align: center;
+            padding: 16px;
+            background: linear-gradient(135deg, rgba(247,147,26,0.1), rgba(247,147,26,0.05));
+            border: 1px solid rgba(247,147,26,0.2);
+            border-radius: 12px;
+            margin: 16px 0;
+        }
+        .selected-bet span:first-child {
+            font-size: 12px;
+            color: #888;
+            display: block;
+            margin-bottom: 4px;
+        }
+        .selected-bet-amount {
+            font-family: 'Orbitron', monospace;
+            font-size: 28px;
+            font-weight: 900;
+            color: var(--gold);
+            display: block;
+        }
+        .selected-bet-prize {
+            font-size: 12px;
+            color: var(--green);
+            display: block;
+            margin-top: 4px;
+        }
         .tab {
             flex: 1;
             padding: 14px;
@@ -758,6 +818,23 @@
     
     <div class="tab-content active" id="playTab">
         <div class="card">
+            <div class="card-title">💰 Select Stake</div>
+            <div class="bet-selector">
+                <button class="bet-btn active" onclick="selectBet(100)">100</button>
+                <button class="bet-btn" onclick="selectBet(500)">500</button>
+                <button class="bet-btn" onclick="selectBet(1000)">1K</button>
+                <button class="bet-btn" onclick="selectBet(5000)">5K</button>
+                <button class="bet-btn" onclick="showCustomBet()">Custom</button>
+            </div>
+            <div id="customBetDiv" style="display:none; margin-top:12px;">
+                <input type="number" id="customBetInput" placeholder="Enter amount (min 10)" min="10" max="100000">
+                <button class="btn-secondary btn-small" onclick="confirmCustomBet()" style="margin-top:8px;">Set Amount</button>
+            </div>
+            <div class="selected-bet">
+                <span>Playing for:</span>
+                <span class="selected-bet-amount" id="selectedBetDisplay">100 XRS</span>
+                <span class="selected-bet-prize">Winner takes <span id="winnerTakesDisplay">198</span> XRS</span>
+            </div>
             <button class="btn-green" onclick="findRandomGame()">🎲 Find Opponent</button>
             <p style="text-align:center; color:#555; font-size:13px; margin:12px 0;">— or challenge below —</p>
         </div>
@@ -795,7 +872,7 @@
     <div class="modal-content">
         <div class="modal-icon">⚔️</div>
         <div class="modal-title">INCOMING CHALLENGE</div>
-        <p style="color:#888; margin-bottom:24px;"><strong style="color:var(--gold);" id="challengerName">Player</strong> challenges you for <span style="color:var(--gold);">100 XRS</span></p>
+        <p style="color:#888; margin-bottom:24px;"><strong style="color:var(--gold);" id="challengerName">Player</strong> challenges you for <span style="color:var(--gold);" id="challengeBetAmount">100 XRS</span></p>
         <button class="btn-green" onclick="acceptChallenge()">Accept Battle</button>
         <button class="btn-secondary" onclick="declineChallenge()">Decline</button>
     </div>
@@ -824,7 +901,7 @@
         
         <div class="deposit-info">
             <div style="font-size:12px; color:#666; text-transform:uppercase; letter-spacing:2px;">Deposit Required</div>
-            <div style="font-family:'Orbitron',monospace; font-size:36px; font-weight:900; color:var(--gold); margin:10px 0;">100 XRS</div>
+            <div style="font-family:'Orbitron',monospace; font-size:36px; font-weight:900; color:var(--gold); margin:10px 0;" id="depositAmount">100 XRS</div>
             <div style="font-size:12px; color:#666; margin-top:16px;">Send to escrow:</div>
             <div class="escrow-addr" id="escrowAddr">Loading...</div>
             <button class="copy-btn" onclick="copyEscrow()">📋 Copy Address</button>
@@ -887,7 +964,7 @@ let myStats = { wins: 0, losses: 0 };
 let myColor = null;
 let myGameId = null;
 let escrowAddress = null;
-let betAmount = 100;
+let selectedBet = 100;
 let board = [];
 let selectedSquare = null;
 let lastMove = null;
@@ -898,6 +975,34 @@ const PIECES = {
     'K':'♔','Q':'♕','R':'♖','B':'♗','N':'♘','P':'♙',
     'k':'♚','q':'♛','r':'♜','b':'♝','n':'♞','p':'♟'
 };
+
+function selectBet(amount) {
+    selectedBet = amount;
+    document.querySelectorAll('.bet-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById('customBetDiv').style.display = 'none';
+    updateBetDisplay();
+}
+
+function showCustomBet() {
+    document.querySelectorAll('.bet-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById('customBetDiv').style.display = 'block';
+}
+
+function confirmCustomBet() {
+    const amount = parseInt(document.getElementById('customBetInput').value);
+    if (amount < 10) { alert('Minimum bet is 10 XRS'); return; }
+    if (amount > 100000) { alert('Maximum bet is 100,000 XRS'); return; }
+    selectedBet = amount;
+    document.getElementById('customBetDiv').style.display = 'none';
+    updateBetDisplay();
+}
+
+function updateBetDisplay() {
+    document.getElementById('selectedBetDisplay').textContent = selectedBet.toLocaleString() + ' XRS';
+    document.getElementById('winnerTakesDisplay').textContent = Math.floor(selectedBet * 2 * 0.99).toLocaleString();
+}
 
 function saveSession() {
     if (myWallet && myUsername) {
@@ -960,7 +1065,7 @@ function handleMessage(msg) {
     console.log('MSG:', msg);
     switch (msg.type) {
         case 'connected':
-            myPlayerId = msg.playerId; escrowAddress = msg.escrow; betAmount = msg.bet;
+            myPlayerId = msg.playerId; escrowAddress = msg.escrow;
             break;
         case 'wallet_connected':
             if (msg.existingUsername) {
@@ -979,6 +1084,7 @@ function handleMessage(msg) {
         case 'challenge_received':
             pendingChallenge = msg;
             document.getElementById('challengerName').textContent = msg.fromUsername;
+            document.getElementById('challengeBetAmount').textContent = (msg.bet || 100) + ' XRS';
             showModal('challengeModal');
             break;
         case 'challenge_declined':
@@ -1070,14 +1176,16 @@ function renderLeaderboard(id, list) {
 
 function esc(s) { return String(s).replace(/[<>"'&]/g, c => ({'<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','&':'&amp;'}[c])); }
 
-function findRandomGame() { send({ type: 'find_game' }); }
-function challenge(id) { send({ type: 'challenge', targetId: id }); show('waitingScreen'); }
+function findRandomGame() { send({ type: 'find_game', bet: selectedBet }); }
+function challenge(id) { send({ type: 'challenge', targetId: id, bet: selectedBet }); show('waitingScreen'); }
 function acceptChallenge() { if (pendingChallenge) { send({ type: 'accept_challenge', challengeId: pendingChallenge.challengeId }); hideModal('challengeModal'); pendingChallenge = null; } }
 function declineChallenge() { if (pendingChallenge) { send({ type: 'decline_challenge', challengeId: pendingChallenge.challengeId }); hideModal('challengeModal'); pendingChallenge = null; } }
 function cancelSearch() { send({ type: 'cancel_search' }); show('lobbyScreen'); }
 
 function showDepositScreen(msg) {
     show('depositScreen');
+    const betAmt = msg.amount || selectedBet || 100;
+    document.getElementById('depositAmount').textContent = betAmt.toLocaleString() + ' XRS';
     document.getElementById('escrowAddr').textContent = msg.escrow;
     document.getElementById('depositMyName').textContent = myUsername;
     document.getElementById('depositMyColor').textContent = msg.color === 'white' ? '♔ White' : '♚ Black';
@@ -1170,12 +1278,13 @@ function resign() { if (confirm('Surrender and lose 100 XRS?')) send({ type: 're
 
 function showResult(msg) {
     const won = msg.winner === myColor;
+    const lostAmount = msg.bet || selectedBet || 100;
     if (won) myStats.wins++; else myStats.losses++;
     saveSession();
     document.getElementById('resultIcon').textContent = won ? '🏆' : '💀';
     document.getElementById('resultText').textContent = won ? 'VICTORY' : 'DEFEAT';
     document.getElementById('resultText').className = 'result-text ' + (won ? 'win' : 'lose');
-    document.getElementById('resultPrize').textContent = won ? '+' + msg.prize + ' XRS' : '-100 XRS';
+    document.getElementById('resultPrize').textContent = won ? '+' + msg.prize + ' XRS' : '-' + lostAmount + ' XRS';
     document.getElementById('resultPrize').className = 'result-prize ' + (won ? 'win' : 'lose');
     document.getElementById('resultReason').textContent = 'by ' + msg.reason;
     show('resultScreen');
