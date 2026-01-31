@@ -1483,6 +1483,9 @@
         .chat-msg .sender.opponent {
             color: var(--green);
         }
+        .chat-msg .sender.spectator {
+            color: var(--purple);
+        }
         .chat-msg .text {
             color: #ccc;
         }
@@ -1514,7 +1517,7 @@
             }
         }
         
-        /* SPECTATE CHAT (read-only) */
+        /* SPECTATE CHAT */
         .spec-chat {
             width: 100%;
             max-width: 326px;
@@ -1530,12 +1533,24 @@
             padding: 10px 14px;
             font-size: 12px;
             font-weight: 700;
+            text-align: center;
         }
         .spec-chat .chat-messages {
             height: 100px;
             overflow-y: auto;
             padding: 10px;
             font-size: 13px;
+        }
+        .spec-chat .chat-input-row {
+            border-top: 1px solid var(--dark-4);
+        }
+        .spec-chat .chat-input-row input {
+            border: none;
+            border-radius: 0;
+            background: var(--dark-2);
+            padding: 10px 12px;
+            font-size: 13px;
+            margin: 0;
         }
         @media (min-width: 500px) { .spec-chat { max-width: 406px; } }
         @media (min-width: 900px) { .spec-chat { max-width: 606px; } .spec-chat .chat-messages { height: 120px; } }
@@ -1861,10 +1876,14 @@
     <div id="specBoard"></div>
     <div id="specMoves">Game moves appear here...</div>
     
-    <!-- Spectate Chat (read-only view) -->
+    <!-- Spectate Chat (with input for spectators) -->
     <div class="spec-chat">
         <div class="spec-chat-header">💬 Live Chat</div>
         <div class="chat-messages" id="specChatMessages"></div>
+        <div class="chat-input-row">
+            <input type="text" id="specChatInput" placeholder="Type message..." maxlength="100" onkeypress="if(event.key==='Enter')sendSpecChat()">
+            <button class="chat-send-btn" onclick="sendSpecChat()">➤</button>
+        </div>
     </div>
     
     <button class="btn-secondary btn-small" onclick="leaveSpectate()" style="margin-top:12px;">← Leave</button>
@@ -1983,9 +2002,25 @@ function sendMobileChat() {
     input.value = '';
 }
 
+function sendSpecChat() {
+    const input = document.getElementById('specChatInput');
+    const text = input.value.trim();
+    if (!text) return;
+    
+    send({ type: 'spectator_chat', text });
+    input.value = '';
+}
+
 function displayChat(msg) {
-    const isMe = msg.sender === myUsername;
-    const msgHtml = `<div class="chat-msg"><span class="sender ${isMe ? '' : 'opponent'}">${esc(msg.sender)}:</span> <span class="text">${esc(msg.text)}</span></div>`;
+    const isMe = msg.sender === myUsername || msg.sender === '👁️ ' + myUsername;
+    const isSpectatorMsg = msg.sender.startsWith('👁️ ');
+    
+    let senderClass = '';
+    if (isMe) senderClass = '';
+    else if (isSpectatorMsg) senderClass = 'spectator';
+    else senderClass = 'opponent';
+    
+    const msgHtml = `<div class="chat-msg"><span class="sender ${senderClass}">${esc(msg.sender)}:</span> <span class="text">${esc(msg.text)}</span></div>`;
     
     // Add to desktop chat
     const desktopChat = document.getElementById('chatMessages');

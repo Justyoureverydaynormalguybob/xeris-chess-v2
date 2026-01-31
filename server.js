@@ -956,6 +956,10 @@ async function handleMessage(playerId, msg) {
         case 'chat':
             handleChat(playerId, msg.text);
             break;
+            
+        case 'spectator_chat':
+            handleSpectatorChat(playerId, msg.text);
+            break;
     }
 }
 
@@ -1384,6 +1388,38 @@ function handleChat(playerId, text) {
     if (blackPlayer) send(blackPlayer.ws, chatMsg);
     
     // Also send to spectators
+    if (game.spectators) {
+        game.spectators.forEach(specId => {
+            const spec = players.get(specId);
+            if (spec) send(spec.ws, chatMsg);
+        });
+    }
+}
+
+function handleSpectatorChat(playerId, text) {
+    const player = players.get(playerId);
+    if (!player?.spectatingGame || !player.username || !text) return;
+    
+    const game = games.get(player.spectatingGame);
+    if (!game || !game.started) return;
+    
+    // Sanitize and limit text
+    const safeText = String(text).trim().slice(0, 100);
+    if (!safeText) return;
+    
+    const chatMsg = {
+        type: 'chat',
+        sender: '👁️ ' + player.username, // Prefix to show they're a spectator
+        text: safeText
+    };
+    
+    // Send to both players
+    const whitePlayer = players.get(game.white);
+    const blackPlayer = players.get(game.black);
+    if (whitePlayer) send(whitePlayer.ws, chatMsg);
+    if (blackPlayer) send(blackPlayer.ws, chatMsg);
+    
+    // Also send to all spectators
     if (game.spectators) {
         game.spectators.forEach(specId => {
             const spec = players.get(specId);
