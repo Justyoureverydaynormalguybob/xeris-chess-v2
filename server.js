@@ -150,6 +150,27 @@ const waitingPlayers = new Map(); // bet amount -> playerId
 let gameCounter = 0;
 let challengeCounter = 0;
 
+// Tournament State
+let activeTournament = null;
+let tournamentCounter = 0;
+
+/*
+Tournament structure:
+{
+    id: 't1',
+    name: 'Championship Night',
+    size: 8 or 16,
+    entryFee: 100,
+    prizePool: 1000, // Extra prize added by admin
+    players: [], // { oderId, username, wallet }
+    bracket: [], // [[round1 matches], [round2 matches], ...]
+    currentRound: 0,
+    status: 'registration' | 'in_progress' | 'finished',
+    winner: null,
+    createdAt: Date.now()
+}
+*/
+
 // HTTP API call helper
 function apiCall(port, endpoint) {
     return new Promise((resolve, reject) => {
@@ -583,6 +604,88 @@ const server = http.createServer((req, res) => {
         return;
     }
     
+    // Tournament: Get current tournament
+    if (req.url === '/api/tournament') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ tournament: activeTournament }));
+        return;
+    }
+    
+    // Admin: Create tournament (POST with ?name=X&size=8&entry=100&prize=1000&key=secret)
+    if (req.url.startsWith('/api/tournament/create')) {
+        const url = new URL(req.url, `http://${req.headers.host}`);
+        const name = url.searchParams.get('name') || 'Championship Night';
+        const size = parseInt(url.searchParams.get('size')) || 8;
+        const entryFee = parseInt(url.searchParams.get('entry')) || 100;
+        const prizePool = parseInt(url.searchParams.get('prize')) || 0;
+        const adminKey = url.searchParams.get('key');
+        
+        // Simple admin auth - in production use proper auth
+        if (adminKey !== (process.env.ADMIN_KEY || 'xerisadmin')) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Unauthorized' }));
+            return;
+        }
+        
+        if (activeTournament && activeTournament.status !== 'finished') {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Tournament already active' }));
+            return;
+        }
+        
+        activeTournament = {
+            id: 't' + (++tournamentCounter),
+            name,
+            size: size === 16 ? 16 : 8,
+            entryFee,
+            prizePool,
+            players: [],
+            bracket: [],
+            currentRound: 0,
+            status: 'registration',
+            winner: null,
+            createdAt: Date.now()
+        };
+        
+        // Broadcast tournament created
+        broadcastTournament();
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, tournament: activeTournament }));
+        console.log(`[TOURNAMENT] Created: ${name} (${size} players, ${entryFee} XRS entry, ${prizePool} XRS prize)`);
+        return;
+    }
+    
+    // Admin: Start tournament
+    if (req.url.startsWith('/api/tournament/start')) {
+        const url = new URL(req.url, `http://${req.headers.host}`);
+        const adminKey = url.searchParams.get('key');
+        
+        if (adminKey !== (process.env.ADMIN_KEY || 'xerisadmin')) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Unauthorized' }));
+            return;
+        }
+        
+        if (!activeTournament || activeTournament.status !== 'registration') {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'No tournament in registration' }));
+            return;
+        }
+        
+        if (activeTournament.players.length < activeTournament.size) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: `Need ${activeTournament.size} players, have ${activeTournament.players.length}` }));
+            return;
+        }
+        
+        startTournament();
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, tournament: activeTournament }));
+        return;
+    }
+    
     let filePath = req.url === '/' ? '/index.html' : req.url;
     filePath = path.join(__dirname, 'public', filePath);
     
@@ -607,7 +710,8 @@ wss.on('connection', (ws) => {
         gameId: null, 
         color: null,
         wallet: null,
-        deposited: false 
+        deposited: false,
+        spectatingGame: null
     });
     
     console.log(`[+] ${playerId} connected`);
@@ -748,6 +852,30 @@ async function handleMessage(playerId, msg) {
                 }
             }
             break;
+            
+        case 'get_active_games':
+            sendActiveGames(playerId);
+            break;
+            
+        case 'spectate':
+            handleSpectate(playerId, msg.gameId);
+            break;
+            
+        case 'leave_spectate':
+            handleLeaveSpectate(playerId);
+            break;
+            
+        case 'get_tournament':
+            send(player.ws, { type: 'tournament_update', tournament: activeTournament });
+            break;
+            
+        case 'join_tournament':
+            handleJoinTournament(playerId);
+            break;
+            
+        case 'leave_tournament':
+            handleLeaveTournament(playerId);
+            break;
     }
 }
 
@@ -787,6 +915,86 @@ function broadcastLobby() {
             sendLobbyUpdate(pid);
         }
     }
+}
+
+// Spectate functions
+function getActiveGames() {
+    const activeGames = [];
+    for (const [gameId, game] of games) {
+        if (game.started) {
+            activeGames.push({
+                gameId,
+                whiteName: game.whiteName,
+                blackName: game.blackName,
+                bet: game.bet,
+                spectators: game.spectators?.length || 0
+            });
+        }
+    }
+    return activeGames;
+}
+
+function sendActiveGames(playerId) {
+    const player = players.get(playerId);
+    if (!player) return;
+    
+    send(player.ws, {
+        type: 'active_games',
+        games: getActiveGames()
+    });
+}
+
+function handleSpectate(playerId, gameId) {
+    const player = players.get(playerId);
+    if (!player) return;
+    
+    // Can't spectate if already in a game
+    if (player.gameId) {
+        send(player.ws, { type: 'error', message: 'Leave your current game first' });
+        return;
+    }
+    
+    const game = games.get(gameId);
+    if (!game || !game.started) {
+        send(player.ws, { type: 'error', message: 'Game not found' });
+        return;
+    }
+    
+    // Add to spectators
+    if (!game.spectators) game.spectators = [];
+    if (!game.spectators.includes(playerId)) {
+        game.spectators.push(playerId);
+    }
+    
+    player.spectatingGame = gameId;
+    
+    // Send current game state
+    send(player.ws, {
+        type: 'spectate_start',
+        gameId,
+        whiteName: game.whiteName,
+        blackName: game.blackName,
+        bet: game.bet,
+        pot: game.pot,
+        fen: game.chess.fen(),
+        turn: game.chess.turn() === 'w' ? 'white' : 'black',
+        inCheck: game.chess.inCheck()
+    });
+    
+    console.log(`[SPECTATE] ${player.username} watching ${gameId}`);
+}
+
+function handleLeaveSpectate(playerId) {
+    const player = players.get(playerId);
+    if (!player?.spectatingGame) return;
+    
+    const game = games.get(player.spectatingGame);
+    if (game?.spectators) {
+        game.spectators = game.spectators.filter(id => id !== playerId);
+    }
+    
+    player.spectatingGame = null;
+    send(player.ws, { type: 'spectate_ended' });
 }
 
 // Challenge functions
@@ -874,7 +1082,8 @@ function createGame(whiteId, blackId, bet = DEFAULT_BET_AMOUNT) {
         blackDeposit: false,
         started: false,
         pot: 0,
-        bet: bet // Store bet amount per game
+        bet: bet, // Store bet amount per game
+        spectators: [] // Track spectators
     });
     
     whitePlayer.gameId = gameId;
@@ -1034,13 +1243,23 @@ function handleMove(playerId, msg) {
                 type: 'move',
                 from: msg.from, to: msg.to, san: move.san,
                 fen: game.chess.fen(),
-                turn: game.chess.turn() === 'w' ? 'white' : 'black'
+                turn: game.chess.turn() === 'w' ? 'white' : 'black',
+                inCheck: game.chess.inCheck()
             };
             
+            // Send to players
             send(players.get(game.white)?.ws, moveData);
             send(players.get(game.black)?.ws, moveData);
             
-            console.log(`[MOVE] ${player.gameId}: ${move.san}`);
+            // Send to spectators
+            if (game.spectators) {
+                game.spectators.forEach(specId => {
+                    const spec = players.get(specId);
+                    if (spec) send(spec.ws, moveData);
+                });
+            }
+            
+            console.log(`[MOVE] ${player.gameId}: ${move.san}${game.chess.inCheck() ? '+' : ''}`);
             checkGameOver(player.gameId);
         } else {
             send(player.ws, { type: 'invalid_move' });
@@ -1071,6 +1290,16 @@ function handleDisconnect(playerId) {
     }
     
     const player = players.get(playerId);
+    
+    // Handle spectator disconnect
+    if (player?.spectatingGame) {
+        const game = games.get(player.spectatingGame);
+        if (game?.spectators) {
+            game.spectators = game.spectators.filter(id => id !== playerId);
+        }
+    }
+    
+    // Handle player disconnect
     if (player?.gameId) {
         const game = games.get(player.gameId);
         if (game?.started) {
@@ -1172,9 +1401,12 @@ async function endGame(gameId, result, reason) {
         pot: game.pot,
         bet: betAmount,
         prize: result === 'draw' ? Math.floor(game.pot / 2) : winnerPrize,
-        payoutSuccess
+        payoutSuccess,
+        whiteName: game.whiteName,
+        blackName: game.blackName
     };
     
+    // Notify players
     [game.white, game.black].forEach(id => {
         const p = players.get(id);
         if (p) {
@@ -1185,9 +1417,268 @@ async function endGame(gameId, result, reason) {
         }
     });
     
+    // Notify spectators
+    if (game.spectators) {
+        const spectatorEndData = { ...endData, type: 'spectate_game_over' };
+        game.spectators.forEach(specId => {
+            const spec = players.get(specId);
+            if (spec) {
+                send(spec.ws, spectatorEndData);
+                spec.spectatingGame = null;
+            }
+        });
+    }
+    
     games.delete(gameId);
     console.log(`[END] ${gameId}: ${result} wins (${reason}) - Prize: ${winnerPrize} XRS`);
     broadcastLobby();
+    
+    // Check if this was a tournament game
+    if (game.tournamentId && activeTournament) {
+        handleTournamentGameEnd(gameId, result);
+    }
+}
+
+// TOURNAMENT FUNCTIONS
+function broadcastTournament() {
+    for (const [pid, p] of players) {
+        if (p.username) {
+            send(p.ws, { type: 'tournament_update', tournament: activeTournament });
+        }
+    }
+}
+
+function handleJoinTournament(playerId) {
+    const player = players.get(playerId);
+    if (!player || !player.username || !player.wallet) {
+        send(player?.ws, { type: 'error', message: 'Connect wallet first' });
+        return;
+    }
+    
+    if (!activeTournament || activeTournament.status !== 'registration') {
+        send(player.ws, { type: 'error', message: 'No tournament open for registration' });
+        return;
+    }
+    
+    if (activeTournament.players.length >= activeTournament.size) {
+        send(player.ws, { type: 'error', message: 'Tournament is full' });
+        return;
+    }
+    
+    // Check if already registered
+    if (activeTournament.players.some(p => p.oderId === playerId)) {
+        send(player.ws, { type: 'error', message: 'Already registered' });
+        return;
+    }
+    
+    activeTournament.players.push({
+        oderId: playerId,
+        username: player.username,
+        wallet: player.wallet
+    });
+    
+    console.log(`[TOURNAMENT] ${player.username} joined (${activeTournament.players.length}/${activeTournament.size})`);
+    broadcastTournament();
+}
+
+function handleLeaveTournament(playerId) {
+    if (!activeTournament || activeTournament.status !== 'registration') return;
+    
+    activeTournament.players = activeTournament.players.filter(p => p.oderId !== playerId);
+    broadcastTournament();
+}
+
+function startTournament() {
+    if (!activeTournament || activeTournament.players.length < activeTournament.size) return;
+    
+    activeTournament.status = 'in_progress';
+    
+    // Shuffle players
+    const shuffled = [...activeTournament.players].sort(() => Math.random() - 0.5);
+    
+    // Create first round bracket
+    const round1 = [];
+    for (let i = 0; i < shuffled.length; i += 2) {
+        round1.push({
+            player1: shuffled[i],
+            player2: shuffled[i + 1],
+            gameId: null,
+            winner: null,
+            status: 'pending'
+        });
+    }
+    
+    activeTournament.bracket = [round1];
+    activeTournament.currentRound = 0;
+    
+    console.log(`[TOURNAMENT] Started: ${activeTournament.name}`);
+    broadcastTournament();
+    
+    // Start first round matches
+    startTournamentRound();
+}
+
+function startTournamentRound() {
+    if (!activeTournament || activeTournament.status !== 'in_progress') return;
+    
+    const currentMatches = activeTournament.bracket[activeTournament.currentRound];
+    if (!currentMatches) return;
+    
+    for (const match of currentMatches) {
+        if (match.status === 'pending' && match.player1 && match.player2) {
+            // Create tournament game
+            createTournamentGame(match);
+        }
+    }
+}
+
+function createTournamentGame(match) {
+    const p1 = players.get(match.player1.oderId);
+    const p2 = players.get(match.player2.oderId);
+    
+    if (!p1 || !p2) {
+        // Handle disconnected player - auto-win for other
+        if (p1 && !p2) {
+            match.winner = match.player1;
+            match.status = 'complete';
+        } else if (p2 && !p1) {
+            match.winner = match.player2;
+            match.status = 'complete';
+        }
+        broadcastTournament();
+        checkRoundComplete();
+        return;
+    }
+    
+    const gameId = 'tg' + (++gameCounter);
+    const chess = new Chess();
+    
+    // Randomize colors
+    let whiteId = match.player1.oderId;
+    let blackId = match.player2.oderId;
+    if (Math.random() < 0.5) {
+        [whiteId, blackId] = [blackId, whiteId];
+    }
+    
+    const whitePlayer = players.get(whiteId);
+    const blackPlayer = players.get(blackId);
+    
+    games.set(gameId, {
+        chess,
+        white: whiteId,
+        black: blackId,
+        whiteWallet: whitePlayer.wallet,
+        blackWallet: blackPlayer.wallet,
+        whiteName: whitePlayer.username,
+        blackName: blackPlayer.username,
+        whiteDeposit: true, // Auto-confirmed for tournament
+        blackDeposit: true,
+        started: true,
+        pot: 0, // No pot for tournament games
+        bet: 0,
+        tournamentId: activeTournament.id,
+        matchIndex: activeTournament.bracket[activeTournament.currentRound].indexOf(match)
+    });
+    
+    match.gameId = gameId;
+    match.status = 'in_progress';
+    
+    whitePlayer.gameId = gameId;
+    whitePlayer.color = 'white';
+    blackPlayer.gameId = gameId;
+    blackPlayer.color = 'black';
+    
+    // Send game start
+    const gameData = {
+        type: 'tournament_game_start',
+        gameId,
+        fen: chess.fen(),
+        turn: 'white',
+        pot: 0,
+        tournamentName: activeTournament.name,
+        round: activeTournament.currentRound + 1
+    };
+    
+    send(whitePlayer.ws, { ...gameData, color: 'white', whiteName: whitePlayer.username, blackName: blackPlayer.username });
+    send(blackPlayer.ws, { ...gameData, color: 'black', whiteName: whitePlayer.username, blackName: blackPlayer.username });
+    
+    console.log(`[TOURNAMENT] Match: ${whitePlayer.username} vs ${blackPlayer.username}`);
+    broadcastTournament();
+}
+
+function handleTournamentGameEnd(gameId, result) {
+    const game = games.get(gameId);
+    if (!game || !activeTournament) return;
+    
+    const currentMatches = activeTournament.bracket[activeTournament.currentRound];
+    const match = currentMatches?.find(m => m.gameId === gameId);
+    if (!match) return;
+    
+    // Determine winner
+    if (result === 'white') {
+        match.winner = match.player1.oderId === game.white ? match.player1 : match.player2;
+    } else if (result === 'black') {
+        match.winner = match.player1.oderId === game.black ? match.player1 : match.player2;
+    } else {
+        // Draw - replay needed (for simplicity, give to player1)
+        match.winner = match.player1;
+    }
+    match.status = 'complete';
+    
+    console.log(`[TOURNAMENT] ${match.winner.username} advances!`);
+    broadcastTournament();
+    
+    checkRoundComplete();
+}
+
+function checkRoundComplete() {
+    if (!activeTournament) return;
+    
+    const currentMatches = activeTournament.bracket[activeTournament.currentRound];
+    const allComplete = currentMatches.every(m => m.status === 'complete');
+    
+    if (!allComplete) return;
+    
+    // Get winners
+    const winners = currentMatches.map(m => m.winner).filter(Boolean);
+    
+    if (winners.length === 1) {
+        // Tournament complete!
+        activeTournament.winner = winners[0];
+        activeTournament.status = 'finished';
+        
+        // Calculate total prize
+        const totalPrize = activeTournament.prizePool + (activeTournament.entryFee * activeTournament.size);
+        
+        // Send payout to winner
+        if (winners[0].wallet && totalPrize > 0) {
+            sendPayout(winners[0].wallet, totalPrize, 'tournament-win');
+        }
+        
+        console.log(`[TOURNAMENT] WINNER: ${winners[0].username} takes ${totalPrize} XRS!`);
+        broadcastTournament();
+    } else {
+        // Create next round
+        const nextRound = [];
+        for (let i = 0; i < winners.length; i += 2) {
+            nextRound.push({
+                player1: winners[i],
+                player2: winners[i + 1] || null,
+                gameId: null,
+                winner: winners[i + 1] ? null : winners[i], // Auto-advance if odd
+                status: winners[i + 1] ? 'pending' : 'complete'
+            });
+        }
+        
+        activeTournament.bracket.push(nextRound);
+        activeTournament.currentRound++;
+        
+        console.log(`[TOURNAMENT] Round ${activeTournament.currentRound + 1} starting...`);
+        broadcastTournament();
+        
+        // Start next round after short delay
+        setTimeout(() => startTournamentRound(), 5000);
+    }
 }
 
 // Startup

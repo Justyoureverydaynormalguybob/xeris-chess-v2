@@ -448,6 +448,90 @@
             .game-status { font-size: 16px; padding: 16px 36px; }
         }
         
+        /* CHECK ALERT */
+        .check-alert {
+            background: linear-gradient(135deg, rgba(239,68,68,0.3), rgba(239,68,68,0.1));
+            border: 2px solid #ef4444;
+            color: #ff6b6b;
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-family: 'Orbitron', monospace;
+            font-weight: 700;
+            font-size: 18px;
+            letter-spacing: 3px;
+            text-align: center;
+            margin: 8px auto;
+            animation: pulse-red 0.5s ease-in-out infinite;
+            box-shadow: 0 0 30px rgba(239,68,68,0.5);
+        }
+        @keyframes pulse-red {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        /* GAME OVER OVERLAY */
+        .game-over-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.85);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(8px);
+            animation: fadeIn 0.5s ease;
+        }
+        .game-over-overlay.active { display: flex; }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .game-over-content {
+            text-align: center;
+            animation: slideUp 0.5s ease;
+        }
+        @keyframes slideUp {
+            from { transform: translateY(50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .game-over-icon {
+            font-size: 100px;
+            margin-bottom: 20px;
+            animation: bounce 1s ease infinite;
+        }
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+        .game-over-title {
+            font-family: 'Orbitron', monospace;
+            font-size: 36px;
+            font-weight: 900;
+            letter-spacing: 4px;
+            color: var(--gold);
+            text-shadow: 0 0 30px rgba(247,147,26,0.6);
+            margin-bottom: 10px;
+        }
+        .game-over-result {
+            font-family: 'Orbitron', monospace;
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+        .game-over-prize {
+            font-family: 'Orbitron', monospace;
+            font-size: 42px;
+            font-weight: 900;
+        }
+        .game-over-prize.win {
+            color: var(--gold);
+            text-shadow: 0 0 40px rgba(247,147,26,0.6);
+        }
+        .game-over-prize.lose {
+            color: #ef4444;
+            text-shadow: 0 0 40px rgba(239,68,68,0.6);
+        }
+        
         /* MATCH BAR */
         .match-bar {
             display: flex;
@@ -729,6 +813,268 @@
         .user-name { font-weight: 700; font-size: 16px; }
         .user-record { font-size: 13px; color: var(--green); }
         
+        /* SPECTATE BANNER */
+        .spectate-banner {
+            background: linear-gradient(135deg, var(--purple), var(--pink));
+            color: white;
+            padding: 10px 24px;
+            border-radius: 30px;
+            font-family: 'Orbitron', monospace;
+            font-weight: 700;
+            font-size: 12px;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            margin-bottom: 12px;
+            animation: pulse-purple 2s infinite;
+        }
+        @keyframes pulse-purple {
+            0%, 100% { box-shadow: 0 0 20px rgba(139,92,246,0.4); }
+            50% { box-shadow: 0 0 40px rgba(139,92,246,0.6); }
+        }
+        
+        /* TOURNAMENT STYLES */
+        .tournament-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .tournament-name {
+            font-family: 'Orbitron', monospace;
+            font-size: 22px;
+            font-weight: 900;
+            color: var(--gold);
+            letter-spacing: 2px;
+        }
+        .tournament-status {
+            font-size: 12px;
+            padding: 6px 16px;
+            border-radius: 20px;
+            display: inline-block;
+            margin-top: 8px;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+        .tournament-status.registration {
+            background: rgba(0,212,170,0.2);
+            color: var(--green);
+            border: 1px solid var(--green);
+        }
+        .tournament-status.in_progress {
+            background: rgba(239,68,68,0.2);
+            color: #ef4444;
+            border: 1px solid #ef4444;
+            animation: pulse-red 1s infinite;
+        }
+        .tournament-status.finished {
+            background: rgba(247,147,26,0.2);
+            color: var(--gold);
+            border: 1px solid var(--gold);
+        }
+        .tournament-info {
+            display: flex;
+            justify-content: space-around;
+            padding: 16px 0;
+            border-top: 1px solid var(--dark-4);
+            border-bottom: 1px solid var(--dark-4);
+            margin: 16px 0;
+        }
+        .tournament-stat {
+            text-align: center;
+        }
+        .tournament-stat .value {
+            font-family: 'Orbitron', monospace;
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--gold);
+            display: block;
+        }
+        .tournament-stat .label {
+            font-size: 11px;
+            color: #888;
+            text-transform: uppercase;
+        }
+        .tournament-player {
+            padding: 10px 14px;
+            background: var(--dark-3);
+            border-radius: 8px;
+            margin: 6px 0;
+            font-weight: 600;
+        }
+        .tournament-player.empty {
+            color: #555;
+            font-style: italic;
+            font-weight: 400;
+        }
+        .tournament-winner {
+            text-align: center;
+            padding: 24px;
+        }
+        .winner-name {
+            font-family: 'Orbitron', monospace;
+            font-size: 28px;
+            font-weight: 900;
+            color: var(--gold);
+            margin: 12px 0;
+        }
+        .winner-prize {
+            font-family: 'Orbitron', monospace;
+            font-size: 24px;
+            color: var(--green);
+        }
+        
+        /* BRACKET */
+        .bracket {
+            display: flex;
+            gap: 20px;
+            overflow-x: auto;
+            padding: 16px 0;
+        }
+        .bracket-round {
+            min-width: 140px;
+        }
+        .round-title {
+            font-family: 'Orbitron', monospace;
+            font-size: 11px;
+            color: var(--gold);
+            text-align: center;
+            margin-bottom: 12px;
+            letter-spacing: 1px;
+        }
+        .bracket-match {
+            background: var(--dark-3);
+            border: 1px solid var(--dark-4);
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 12px;
+            text-align: center;
+            position: relative;
+        }
+        .bracket-match.in_progress {
+            border-color: #ef4444;
+            box-shadow: 0 0 15px rgba(239,68,68,0.3);
+        }
+        .bracket-match.complete {
+            opacity: 0.7;
+        }
+        .bracket-player {
+            font-size: 13px;
+            padding: 4px 0;
+        }
+        .bracket-player.winner {
+            color: var(--gold);
+            font-weight: 700;
+        }
+        .bracket-vs {
+            font-size: 10px;
+            color: #666;
+        }
+        .match-live {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            font-size: 10px;
+            background: #ef4444;
+            padding: 2px 8px;
+            border-radius: 10px;
+            animation: blink 1s infinite;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        /* LIVE GAME ITEM */
+        .live-game-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 16px;
+            border-radius: 12px;
+            margin: 8px 0;
+            background: var(--dark-3);
+            border: 1px solid var(--dark-4);
+            transition: all 0.3s ease;
+        }
+        .live-game-item:hover {
+            border-color: var(--purple);
+            background: rgba(139,92,246,0.1);
+        }
+        .live-game-players {
+            flex: 1;
+        }
+        .live-game-vs {
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .live-game-vs span { color: var(--gold); }
+        .live-game-bet {
+            font-size: 12px;
+            color: #888;
+            margin-top: 4px;
+        }
+        .live-game-spectators {
+            font-size: 11px;
+            color: var(--purple);
+            margin-right: 12px;
+        }
+        
+        /* SPECTATE BOARD */
+        #specBoard {
+            display: grid;
+            grid-template-columns: repeat(8, 40px);
+            grid-template-rows: repeat(8, 40px);
+            border-radius: 8px;
+            margin: 20px auto;
+            width: 326px;
+            height: 326px;
+            box-shadow: 
+                0 0 0 4px var(--dark-4),
+                0 0 0 6px var(--purple),
+                0 0 40px rgba(139,92,246,0.3),
+                0 20px 60px rgba(0,0,0,0.5);
+            overflow: hidden;
+        }
+        @media (min-width: 500px) {
+            #specBoard {
+                grid-template-columns: repeat(8, 50px);
+                grid-template-rows: repeat(8, 50px);
+                width: 406px;
+                height: 406px;
+            }
+        }
+        @media (min-width: 900px) {
+            #specBoard {
+                grid-template-columns: repeat(8, 75px);
+                grid-template-rows: repeat(8, 75px);
+                width: 606px;
+                height: 606px;
+            }
+        }
+        @media (min-width: 1400px) {
+            #specBoard {
+                grid-template-columns: repeat(8, 85px);
+                grid-template-rows: repeat(8, 85px);
+                width: 686px;
+                height: 686px;
+            }
+        }
+        #specMoves {
+            background: var(--dark-3);
+            padding: 12px 16px;
+            border-radius: 12px;
+            border: 1px solid var(--dark-4);
+            width: 100%;
+            max-width: 326px;
+            max-height: 50px;
+            overflow-y: auto;
+            font-family: 'Orbitron', monospace;
+            font-size: 11px;
+            color: #888;
+            margin: 10px auto;
+        }
+        @media (min-width: 500px) { #specMoves { max-width: 406px; } }
+        @media (min-width: 900px) { #specMoves { max-width: 606px; font-size: 13px; } }
+        @media (min-width: 1400px) { #specMoves { max-width: 686px; } }
+        
         /* Crypto coin animation */
         .coin {
             display: inline-block;
@@ -813,7 +1159,9 @@
     
     <div class="tabs">
         <div class="tab active" onclick="switchTab('play')">⚔️ Battle</div>
-        <div class="tab" onclick="switchTab('leaderboard')">🏆 Rankings</div>
+        <div class="tab" onclick="switchTab('live')">👁️ Live</div>
+        <div class="tab" onclick="switchTab('tournament')">🏆 Tournament</div>
+        <div class="tab" onclick="switchTab('leaderboard')">📊 Ranks</div>
     </div>
     
     <div class="tab-content active" id="playTab">
@@ -842,6 +1190,22 @@
         <div class="card">
             <div class="card-title">👥 Online Warriors</div>
             <div id="playersList"><p style="color:#555; text-align:center;">Scanning arena...</p></div>
+        </div>
+    </div>
+    
+    <div class="tab-content" id="liveTab">
+        <div class="card">
+            <div class="card-title">🎮 Live Games</div>
+            <div id="activeGamesList"><p style="color:#555; text-align:center;">No games in progress</p></div>
+            <button class="btn-secondary" onclick="refreshActiveGames()" style="margin-top:12px;">🔄 Refresh</button>
+        </div>
+    </div>
+    
+    <div class="tab-content" id="tournamentTab">
+        <div class="card">
+            <div id="tournamentContent">
+                <p style="color:#555; text-align:center;">No tournament active</p>
+            </div>
         </div>
     </div>
     
@@ -935,9 +1299,60 @@
     </div>
     
     <div class="game-status" id="gameStatus">Your turn</div>
+    <div class="check-alert" id="checkAlert" style="display:none;">⚠️ CHECK!</div>
     <div id="board"></div>
     <div id="moves">Game moves appear here...</div>
     <button class="btn-danger btn-small" onclick="resign()" style="margin-top:12px;">🏳️ Surrender</button>
+    
+    <!-- Game Over Overlay -->
+    <div class="game-over-overlay" id="gameOverOverlay">
+        <div class="game-over-content">
+            <div class="game-over-icon" id="gameOverIcon">🏆</div>
+            <div class="game-over-title" id="gameOverTitle">CHECKMATE!</div>
+            <div class="game-over-result" id="gameOverResult">You Win!</div>
+            <div class="game-over-prize" id="gameOverPrize">+198 XRS</div>
+            <button class="btn-gold" onclick="goToResults()" style="margin-top:20px;">View Results</button>
+        </div>
+    </div>
+</div>
+
+<!-- SPECTATE SCREEN -->
+<div class="screen" id="spectateScreen">
+    <div class="spectate-banner">
+        <span>👁️ SPECTATING</span>
+    </div>
+    
+    <div class="match-bar">
+        <div class="match-player">
+            <div class="match-name" id="specWhiteName">White</div>
+            <div class="match-color">♔ White</div>
+        </div>
+        <div class="match-pot">
+            <div class="pot-amount" id="specPot">200 XRS</div>
+            <div class="pot-label">Prize Pool</div>
+        </div>
+        <div class="match-player">
+            <div class="match-name" id="specBlackName">Black</div>
+            <div class="match-color">♚ Black</div>
+        </div>
+    </div>
+    
+    <div class="game-status" id="specStatus">White's turn</div>
+    <div class="check-alert" id="specCheckAlert" style="display:none;">⚠️ CHECK!</div>
+    <div id="specBoard"></div>
+    <div id="specMoves">Game moves appear here...</div>
+    <button class="btn-secondary btn-small" onclick="leaveSpectate()" style="margin-top:12px;">← Leave</button>
+    
+    <!-- Spectate Game Over Overlay -->
+    <div class="game-over-overlay" id="specGameOverOverlay">
+        <div class="game-over-content">
+            <div class="game-over-icon" id="specGameOverIcon">🏆</div>
+            <div class="game-over-title" id="specGameOverTitle">CHECKMATE!</div>
+            <div class="game-over-result" id="specGameOverResult">White Wins!</div>
+            <div class="game-over-prize" id="specGameOverPrize">+198 XRS</div>
+            <button class="btn-gold" onclick="closeSpectate()" style="margin-top:20px;">Back to Lobby</button>
+        </div>
+    </div>
 </div>
 
 <!-- RESULT SCREEN -->
@@ -1028,11 +1443,21 @@ function hideModal(id) { document.getElementById(id).classList.remove('active');
 function switchTab(tab) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    
+    const tabs = document.querySelectorAll('.tab');
     if (tab === 'play') {
-        document.querySelector('.tab:first-child').classList.add('active');
+        tabs[0].classList.add('active');
         document.getElementById('playTab').classList.add('active');
+    } else if (tab === 'live') {
+        tabs[1].classList.add('active');
+        document.getElementById('liveTab').classList.add('active');
+        refreshActiveGames();
+    } else if (tab === 'tournament') {
+        tabs[2].classList.add('active');
+        document.getElementById('tournamentTab').classList.add('active');
+        send({ type: 'get_tournament' });
     } else {
-        document.querySelector('.tab:last-child').classList.add('active');
+        tabs[3].classList.add('active');
         document.getElementById('leaderboardTab').classList.add('active');
     }
 }
@@ -1116,6 +1541,24 @@ function handleMessage(msg) {
             break;
         case 'error':
             alert(msg.message);
+            break;
+        case 'active_games':
+            renderActiveGames(msg.games);
+            break;
+        case 'spectate_start':
+            startSpectating(msg);
+            break;
+        case 'spectate_game_over':
+            showSpectateGameOver(msg);
+            break;
+        case 'spectate_ended':
+            leaveSpectate();
+            break;
+        case 'tournament_update':
+            renderTournament(msg.tournament);
+            break;
+        case 'tournament_game_start':
+            startTournamentGame(msg);
             break;
     }
 }
@@ -1260,8 +1703,38 @@ function handleClick(r, f) {
 }
 
 function applyMove(msg) {
+    // Handle spectator mode
+    if (isSpectating) {
+        parseSpecFEN(msg.fen);
+        specLastMove = { from: msg.from, to: msg.to };
+        renderSpecBoard();
+        updateSpecTurn(msg.turn);
+        
+        if (msg.inCheck) {
+            document.getElementById('specCheckAlert').style.display = 'block';
+            document.getElementById('specCheckAlert').textContent = '⚠️ CHECK!';
+        } else {
+            document.getElementById('specCheckAlert').style.display = 'none';
+        }
+        
+        const m = document.getElementById('specMoves');
+        m.textContent += ' ' + (msg.san || msg.from + '-' + msg.to);
+        m.scrollLeft = m.scrollWidth;
+        return;
+    }
+    
+    // Normal player mode
     parseFEN(msg.fen); lastMove = { from: msg.from, to: msg.to };
     renderBoard(); updateTurn(msg.turn);
+    
+    // Show check alert
+    if (msg.inCheck) {
+        document.getElementById('checkAlert').style.display = 'block';
+        document.getElementById('checkAlert').textContent = '⚠️ CHECK!';
+    } else {
+        document.getElementById('checkAlert').style.display = 'none';
+    }
+    
     const m = document.getElementById('moves');
     m.textContent += ' ' + (msg.san || msg.from + '-' + msg.to);
     m.scrollLeft = m.scrollWidth;
@@ -1276,23 +1749,312 @@ function updateTurn(turn) {
 
 function resign() { if (confirm('Surrender and lose 100 XRS?')) send({ type: 'resign' }); }
 
+let pendingResult = null;
+let isSpectating = false;
+let specBoard = [];
+let specLastMove = null;
+
 function showResult(msg) {
     const won = msg.winner === myColor;
     const lostAmount = msg.bet || selectedBet || 100;
     if (won) myStats.wins++; else myStats.losses++;
     saveSession();
+    
+    // Store for result screen
+    pendingResult = { won, msg, lostAmount };
+    
+    // Determine title based on reason
+    let title = msg.reason.toUpperCase();
+    if (msg.reason === 'checkmate') title = 'CHECKMATE!';
+    else if (msg.reason === 'resignation') title = 'RESIGNATION!';
+    else if (msg.reason === 'stalemate') title = 'STALEMATE!';
+    else if (msg.reason === 'draw') title = 'DRAW!';
+    else if (msg.reason === 'opponent disconnected') title = 'OPPONENT LEFT!';
+    
+    // Show overlay on game screen
+    document.getElementById('gameOverIcon').textContent = won ? '🏆' : '💀';
+    document.getElementById('gameOverTitle').textContent = title;
+    document.getElementById('gameOverResult').textContent = won ? 'You Win!' : (msg.winner === 'draw' ? 'Draw!' : 'You Lose!');
+    document.getElementById('gameOverResult').style.color = won ? 'var(--green)' : (msg.winner === 'draw' ? '#888' : '#ef4444');
+    
+    const prizeText = won ? '+' + msg.prize + ' XRS' : (msg.winner === 'draw' ? '+' + msg.prize + ' XRS' : '-' + lostAmount + ' XRS');
+    document.getElementById('gameOverPrize').textContent = prizeText;
+    document.getElementById('gameOverPrize').className = 'game-over-prize ' + (won || msg.winner === 'draw' ? 'win' : 'lose');
+    
+    // Hide check alert
+    document.getElementById('checkAlert').style.display = 'none';
+    
+    // Show overlay
+    document.getElementById('gameOverOverlay').classList.add('active');
+}
+
+function goToResults() {
+    document.getElementById('gameOverOverlay').classList.remove('active');
+    
+    if (!pendingResult) { backToLobby(); return; }
+    
+    const { won, msg, lostAmount } = pendingResult;
+    
     document.getElementById('resultIcon').textContent = won ? '🏆' : '💀';
-    document.getElementById('resultText').textContent = won ? 'VICTORY' : 'DEFEAT';
-    document.getElementById('resultText').className = 'result-text ' + (won ? 'win' : 'lose');
-    document.getElementById('resultPrize').textContent = won ? '+' + msg.prize + ' XRS' : '-' + lostAmount + ' XRS';
-    document.getElementById('resultPrize').className = 'result-prize ' + (won ? 'win' : 'lose');
+    document.getElementById('resultText').textContent = won ? 'VICTORY' : (msg.winner === 'draw' ? 'DRAW' : 'DEFEAT');
+    document.getElementById('resultText').className = 'result-text ' + (won ? 'win' : (msg.winner === 'draw' ? '' : 'lose'));
+    document.getElementById('resultPrize').textContent = won ? '+' + msg.prize + ' XRS' : (msg.winner === 'draw' ? '+' + msg.prize + ' XRS' : '-' + lostAmount + ' XRS');
+    document.getElementById('resultPrize').className = 'result-prize ' + (won || msg.winner === 'draw' ? 'win' : 'lose');
     document.getElementById('resultReason').textContent = 'by ' + msg.reason;
+    
+    pendingResult = null;
     show('resultScreen');
 }
 
 function backToLobby() {
     show('lobbyScreen'); send({ type: 'get_lobby' });
     selectedSquare = null; lastMove = null; updateMyInfo();
+}
+
+// SPECTATE FUNCTIONS
+function refreshActiveGames() {
+    send({ type: 'get_active_games' });
+}
+
+function renderActiveGames(games) {
+    const div = document.getElementById('activeGamesList');
+    if (!games || !games.length) {
+        div.innerHTML = '<p style="color:#555; text-align:center;">No games in progress</p>';
+        return;
+    }
+    div.innerHTML = games.map(g => `
+        <div class="live-game-item">
+            <div class="live-game-players">
+                <div class="live-game-vs">${esc(g.whiteName)} <span>vs</span> ${esc(g.blackName)}</div>
+                <div class="live-game-bet">🪙 ${g.bet} XRS</div>
+            </div>
+            <span class="live-game-spectators">👁️ ${g.spectators}</span>
+            <button class="btn-secondary btn-small" onclick="spectateGame('${g.gameId}')">Watch</button>
+        </div>
+    `).join('');
+}
+
+function spectateGame(gameId) {
+    send({ type: 'spectate', gameId });
+}
+
+function startSpectating(msg) {
+    isSpectating = true;
+    specLastMove = null;
+    
+    document.getElementById('specWhiteName').textContent = msg.whiteName;
+    document.getElementById('specBlackName').textContent = msg.blackName;
+    document.getElementById('specPot').textContent = msg.pot + ' XRS';
+    document.getElementById('specMoves').textContent = '';
+    
+    parseSpecFEN(msg.fen);
+    show('spectateScreen');
+    renderSpecBoard();
+    updateSpecTurn(msg.turn);
+    
+    if (msg.inCheck) {
+        document.getElementById('specCheckAlert').style.display = 'block';
+    } else {
+        document.getElementById('specCheckAlert').style.display = 'none';
+    }
+}
+
+function parseSpecFEN(fen) {
+    specBoard = [];
+    const ranks = fen.split(' ')[0].split('/');
+    for (const rank of ranks) {
+        const row = [];
+        for (const c of rank) {
+            if (c >= '1' && c <= '8') { for (let i = 0; i < parseInt(c); i++) row.push(''); }
+            else row.push(c);
+        }
+        specBoard.push(row);
+    }
+}
+
+function renderSpecBoard() {
+    const el = document.getElementById('specBoard');
+    el.innerHTML = '';
+    
+    // Spectators always see from white's perspective
+    for (let displayRow = 0; displayRow < 8; displayRow++) {
+        for (let displayCol = 0; displayCol < 8; displayCol++) {
+            const r = displayRow;
+            const f = displayCol;
+            
+            const sq = document.createElement('div');
+            sq.className = 'sq ' + ((r + f) % 2 === 0 ? 'light' : 'dark');
+            
+            const piece = specBoard[r][f];
+            if (piece) {
+                sq.textContent = PIECES[piece];
+                sq.classList.add(piece === piece.toUpperCase() ? 'white-piece' : 'black-piece');
+            }
+            
+            const sqName = 'abcdefgh'[f] + (8 - r);
+            if (specLastMove && (specLastMove.from === sqName || specLastMove.to === sqName)) {
+                sq.classList.add('lastmove');
+            }
+            
+            el.appendChild(sq);
+        }
+    }
+}
+
+function updateSpecTurn(turn) {
+    const el = document.getElementById('specStatus');
+    el.textContent = turn === 'white' ? "♔ White's turn" : "♚ Black's turn";
+    el.className = 'game-status their-turn';
+}
+
+function leaveSpectate() {
+    isSpectating = false;
+    send({ type: 'leave_spectate' });
+    show('lobbyScreen');
+    send({ type: 'get_lobby' });
+}
+
+function showSpectateGameOver(msg) {
+    let title = msg.reason.toUpperCase();
+    if (msg.reason === 'checkmate') title = 'CHECKMATE!';
+    else if (msg.reason === 'resignation') title = 'RESIGNATION!';
+    else if (msg.reason === 'stalemate') title = 'STALEMATE!';
+    
+    const winnerName = msg.winner === 'white' ? msg.whiteName : (msg.winner === 'black' ? msg.blackName : 'Draw');
+    
+    document.getElementById('specGameOverIcon').textContent = '🏆';
+    document.getElementById('specGameOverTitle').textContent = title;
+    document.getElementById('specGameOverResult').textContent = msg.winner === 'draw' ? 'Draw!' : winnerName + ' Wins!';
+    document.getElementById('specGameOverPrize').textContent = '+' + msg.prize + ' XRS';
+    document.getElementById('specGameOverPrize').className = 'game-over-prize win';
+    
+    document.getElementById('specGameOverOverlay').classList.add('active');
+}
+
+function closeSpectate() {
+    document.getElementById('specGameOverOverlay').classList.remove('active');
+    isSpectating = false;
+    show('lobbyScreen');
+    send({ type: 'get_lobby' });
+}
+
+// TOURNAMENT FUNCTIONS
+let currentTournament = null;
+
+function renderTournament(tournament) {
+    currentTournament = tournament;
+    const div = document.getElementById('tournamentContent');
+    
+    if (!tournament) {
+        div.innerHTML = `
+            <div style="text-align:center;">
+                <div style="font-size:48px; margin-bottom:16px;">🏆</div>
+                <p style="color:#888;">No tournament active</p>
+                <p style="color:#555; font-size:12px; margin-top:8px;">Check back later for Championship Night!</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = `
+        <div class="tournament-header">
+            <div class="tournament-name">${esc(tournament.name)}</div>
+            <div class="tournament-status ${tournament.status}">${tournament.status.replace('_', ' ').toUpperCase()}</div>
+        </div>
+        
+        <div class="tournament-info">
+            <div class="tournament-stat">
+                <span class="value">${tournament.size}</span>
+                <span class="label">Players</span>
+            </div>
+            <div class="tournament-stat">
+                <span class="value">${tournament.entryFee}</span>
+                <span class="label">Entry (XRS)</span>
+            </div>
+            <div class="tournament-stat">
+                <span class="value">${tournament.prizePool + (tournament.entryFee * tournament.size)}</span>
+                <span class="label">Prize Pool</span>
+            </div>
+        </div>
+    `;
+    
+    if (tournament.status === 'registration') {
+        const isJoined = tournament.players.some(p => p.username === myUsername);
+        html += `
+            <div class="tournament-players">
+                <div class="card-title" style="margin-top:16px;">📋 Registered (${tournament.players.length}/${tournament.size})</div>
+                ${tournament.players.map(p => `<div class="tournament-player">${esc(p.username)}</div>`).join('')}
+                ${tournament.players.length < tournament.size ? '<div class="tournament-player empty">Waiting...</div>'.repeat(tournament.size - tournament.players.length) : ''}
+            </div>
+            ${isJoined 
+                ? '<button class="btn-danger" onclick="leaveTournament()">Leave Tournament</button>'
+                : '<button class="btn-gold" onclick="joinTournament()">🎟️ Join Tournament</button>'
+            }
+        `;
+    } else if (tournament.status === 'in_progress') {
+        html += renderBracket(tournament);
+    } else if (tournament.status === 'finished' && tournament.winner) {
+        html += `
+            <div class="tournament-winner">
+                <div style="font-size:64px;">👑</div>
+                <div class="winner-name">${esc(tournament.winner.username)}</div>
+                <div class="winner-prize">+${tournament.prizePool + (tournament.entryFee * tournament.size)} XRS</div>
+            </div>
+        `;
+    }
+    
+    div.innerHTML = html;
+}
+
+function renderBracket(tournament) {
+    let html = '<div class="bracket">';
+    
+    tournament.bracket.forEach((round, roundIdx) => {
+        html += `<div class="bracket-round">
+            <div class="round-title">Round ${roundIdx + 1}</div>`;
+        
+        round.forEach(match => {
+            const p1Class = match.winner?.oderId === match.player1?.oderId ? 'winner' : '';
+            const p2Class = match.winner?.oderId === match.player2?.oderId ? 'winner' : '';
+            
+            html += `
+                <div class="bracket-match ${match.status}">
+                    <div class="bracket-player ${p1Class}">${match.player1 ? esc(match.player1.username) : 'TBD'}</div>
+                    <div class="bracket-vs">vs</div>
+                    <div class="bracket-player ${p2Class}">${match.player2 ? esc(match.player2.username) : 'TBD'}</div>
+                    ${match.status === 'in_progress' ? '<div class="match-live">🔴 LIVE</div>' : ''}
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+    });
+    
+    html += '</div>';
+    return html;
+}
+
+function joinTournament() {
+    send({ type: 'join_tournament' });
+}
+
+function leaveTournament() {
+    send({ type: 'leave_tournament' });
+}
+
+function startTournamentGame(msg) {
+    myColor = msg.color;
+    myGameId = msg.gameId;
+    
+    document.getElementById('gameWhiteName').textContent = msg.whiteName;
+    document.getElementById('gameBlackName').textContent = msg.blackName;
+    document.getElementById('gamePot').textContent = '🏆 ' + msg.tournamentName;
+    document.getElementById('moves').textContent = '';
+    
+    parseFEN(msg.fen);
+    show('gameScreen');
+    renderBoard();
+    updateTurn(msg.turn);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
