@@ -2338,7 +2338,7 @@ function handleMessage(msg) {
             startTournamentGame(msg);
             break;
         case 'chat':
-            addChatMessage(msg.username, msg.message);
+            displayChat(msg);
             break;
         case 'reconnected':
             handleReconnect(msg);

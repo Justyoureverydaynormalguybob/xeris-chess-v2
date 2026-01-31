@@ -954,7 +954,7 @@ async function handleMessage(playerId, msg) {
             break;
             
         case 'chat':
-            handleChat(playerId, msg.message);
+            handleChat(playerId, msg.text);
             break;
     }
 }
