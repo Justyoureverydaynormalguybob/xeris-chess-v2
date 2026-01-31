@@ -532,6 +532,99 @@
             text-shadow: 0 0 40px rgba(239,68,68,0.6);
         }
         
+        /* RADIO PANEL */
+        .radio-panel {
+            width: 100%;
+            max-width: 500px;
+            background: linear-gradient(135deg, var(--dark-2) 0%, var(--dark-3) 100%);
+            border: 1px solid var(--dark-4);
+            border-radius: 12px;
+            padding: 14px 18px;
+            margin-top: 16px;
+        }
+        .radio-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .radio-title {
+            font-family: 'Orbitron', monospace;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--purple);
+            letter-spacing: 1px;
+        }
+        .radio-now-playing {
+            font-size: 11px;
+            color: #666;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .radio-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .radio-select {
+            flex: 1;
+            padding: 10px 12px;
+            font-size: 12px;
+            background: var(--dark-1);
+            border: 1px solid var(--dark-4);
+            border-radius: 8px;
+            color: white;
+        }
+        .radio-select:focus { outline: none; border-color: var(--purple); }
+        .radio-btn {
+            width: 42px;
+            height: 42px;
+            border-radius: 8px;
+            background: var(--dark-3);
+            border: 1px solid var(--dark-4);
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+        .radio-btn:hover { border-color: var(--purple); }
+        .radio-btn.playing { background: var(--purple); border-color: var(--purple); }
+        .radio-volume {
+            width: 70px;
+            accent-color: var(--purple);
+        }
+        .radio-visualizer {
+            display: flex;
+            gap: 2px;
+            align-items: flex-end;
+            height: 14px;
+        }
+        .radio-bar {
+            width: 3px;
+            background: var(--purple);
+            animation: radioBar 0.5s ease infinite alternate;
+        }
+        .radio-bar:nth-child(1) { height: 6px; animation-delay: 0s; }
+        .radio-bar:nth-child(2) { height: 10px; animation-delay: 0.1s; }
+        .radio-bar:nth-child(3) { height: 5px; animation-delay: 0.2s; }
+        .radio-bar:nth-child(4) { height: 12px; animation-delay: 0.15s; }
+        .radio-bar:nth-child(5) { height: 8px; animation-delay: 0.05s; }
+        @keyframes radioBar {
+            to { height: 3px; }
+        }
+        .radio-visualizer.paused .radio-bar {
+            animation: none;
+            height: 3px;
+        }
+        @media (max-width: 500px) {
+            .radio-panel { padding: 12px; }
+            .radio-volume { width: 50px; }
+        }
+        
         /* MATCH BAR */
         .match-bar {
             display: flex;
@@ -1886,6 +1979,30 @@
     
     <button class="btn-danger btn-small" onclick="resign()" style="margin-top:12px;">🏳️ Surrender</button>
     
+    <!-- Radio Panel -->
+    <div class="radio-panel">
+        <div class="radio-header">
+            <div class="radio-title">📻 GAME RADIO</div>
+            <div class="radio-now-playing">
+                <div class="radio-visualizer paused" id="radioVisualizer">
+                    <div class="radio-bar"></div>
+                    <div class="radio-bar"></div>
+                    <div class="radio-bar"></div>
+                    <div class="radio-bar"></div>
+                    <div class="radio-bar"></div>
+                </div>
+                <span id="radioStationName">No station playing</span>
+            </div>
+        </div>
+        <div class="radio-controls">
+            <select class="radio-select" id="radioSelect" onchange="onRadioSelect()">
+                <option value="">-- Select Station --</option>
+            </select>
+            <button class="radio-btn" id="radioPlayBtn" onclick="toggleRadio()">▶️</button>
+            <input type="range" class="radio-volume" id="radioVolume" min="0" max="100" value="50" oninput="setRadioVolume()">
+        </div>
+    </div>
+    
     <!-- Mobile Chat Modal -->
     <div class="mobile-chat-modal" id="mobileChatModal">
         <div class="mobile-chat-content">
@@ -1993,6 +2110,32 @@ let selectedSquare = null;
 let lastMove = null;
 let isMyTurn = false;
 let pendingChallenge = null;
+
+// Radio state
+let radioPlaying = false;
+let radioAudio = null;
+const RADIO_STATIONS = [
+    { name: "🇺🇸 KEXP Seattle (Indie)", url: "https://kexp-mp3-128.streamguys1.com/kexp128.mp3" },
+    { name: "🇬🇧 BBC Radio 1", url: "http://stream.live.vc.bbcmedia.co.uk/bbc_radio_one" },
+    { name: "🇫🇷 FIP France (Eclectic)", url: "https://icecast.radiofrance.fr/fip-midfi.mp3" },
+    { name: "🇩🇪 FluxFM Berlin", url: "https://streams.fluxfm.de/Chillhop/mp3-128/streams.fluxfm.de/" },
+    { name: "🇯🇵 J-Wave Tokyo", url: "https://musicbird.leanstream.co/JCB068-MP3" },
+    { name: "🇧🇷 Jovem Pan (Pop)", url: "https://stream.jovempan.com.br/jpfm" },
+    { name: "🇳🇱 Sublime FM (Soul)", url: "https://20873.live.streamtheworld.com/SUBLIMEFM.mp3" },
+    { name: "🇮🇹 Radio Monte Carlo", url: "https://streamingv2.shoutcast.com/radiomontecarlo" },
+    { name: "🇪🇸 Los 40 Spain", url: "https://playerservices.streamtheworld.com/api/livestream-redirect/LOS40.mp3" },
+    { name: "🇦🇺 Triple J (Alt)", url: "https://live-radio01.mediahubaustralia.com/2TJW/mp3/" },
+    { name: "🇨🇦 CBC Radio 2", url: "https://cbcradiolive.akamaized.net/hls/live/2041509/ES_R2TOR/master.m3u8" },
+    { name: "🇮🇪 RTÉ 2FM (Hits)", url: "https://radio.rte.ie/2fm-aac-high" },
+    { name: "🇿🇦 5FM South Africa", url: "https://5fm.shoutcaststream.com/5fm" },
+    { name: "🇰🇷 KBS Cool FM", url: "http://serpent0.duckdns.org:8088/kbscool.pls" },
+    { name: "🌍 Lofi Hip Hop", url: "https://streams.ilovemusic.de/iloveradio17.mp3" },
+    { name: "🌍 Chillhop", url: "https://streams.fluxfm.de/Chillhop/mp3-128/streams.fluxfm.de/" },
+    { name: "🌍 Synthwave", url: "https://radio.nightride.fm/nightride.m4a" },
+    { name: "🌍 Jazz24", url: "https://live.wostreaming.net/direct/ppm-jazz24mp3-ibc1" },
+    { name: "🌍 Deep House", url: "https://streams.ilovemusic.de/iloveradio2.mp3" },
+    { name: "🌍 Classical WQXR", url: "https://stream.wqxr.org/wqxr" }
+];
 
 const PIECES = {
     'K':'♔','Q':'♕','R':'♖','B':'♗','N':'♘','P':'♙',
@@ -2712,6 +2855,9 @@ let specBoard = [];
 let specLastMove = null;
 
 function showResult(msg) {
+    // Stop radio when game ends
+    stopRadio();
+    
     const won = msg.winner === myColor;
     const lostAmount = msg.bet || selectedBet || 100;
     if (won) myStats.wins++; else myStats.losses++;
@@ -3063,7 +3209,103 @@ function loadChampionshipCount() {
         .catch(() => {});
 }
 
+// Radio Functions
+function initRadio() {
+    // Create audio element
+    radioAudio = document.createElement('audio');
+    radioAudio.crossOrigin = 'anonymous';
+    document.body.appendChild(radioAudio);
+    
+    // Populate select
+    const select = document.getElementById('radioSelect');
+    if (select) {
+        RADIO_STATIONS.forEach((station, idx) => {
+            const option = document.createElement('option');
+            option.value = idx;
+            option.textContent = station.name;
+            select.appendChild(option);
+        });
+    }
+    
+    // Set initial volume
+    const volSlider = document.getElementById('radioVolume');
+    if (volSlider && radioAudio) {
+        radioAudio.volume = volSlider.value / 100;
+    }
+}
+
+function onRadioSelect() {
+    const select = document.getElementById('radioSelect');
+    const idx = parseInt(select.value);
+    
+    if (isNaN(idx) || idx < 0) {
+        stopRadio();
+        return;
+    }
+    
+    const station = RADIO_STATIONS[idx];
+    document.getElementById('radioStationName').textContent = station.name;
+    
+    // Auto-play when selecting
+    playRadio(station);
+}
+
+function toggleRadio() {
+    if (radioPlaying) {
+        stopRadio();
+    } else {
+        const select = document.getElementById('radioSelect');
+        const idx = parseInt(select.value);
+        
+        if (isNaN(idx) || idx < 0) {
+            alert('Please select a radio station first');
+            return;
+        }
+        
+        playRadio(RADIO_STATIONS[idx]);
+    }
+}
+
+function playRadio(station) {
+    if (!radioAudio) return;
+    
+    radioAudio.src = station.url;
+    radioAudio.play()
+        .then(() => {
+            radioPlaying = true;
+            document.getElementById('radioPlayBtn').textContent = '⏸️';
+            document.getElementById('radioPlayBtn').classList.add('playing');
+            document.getElementById('radioVisualizer').classList.remove('paused');
+            document.getElementById('radioStationName').textContent = station.name;
+        })
+        .catch(err => {
+            console.log('Radio playback error:', err);
+            alert('Could not play this station. Try another one.');
+        });
+}
+
+function stopRadio() {
+    if (!radioAudio) return;
+    
+    radioAudio.pause();
+    radioAudio.src = '';
+    radioPlaying = false;
+    document.getElementById('radioPlayBtn').textContent = '▶️';
+    document.getElementById('radioPlayBtn').classList.remove('playing');
+    document.getElementById('radioVisualizer').classList.add('paused');
+}
+
+function setRadioVolume() {
+    const volSlider = document.getElementById('radioVolume');
+    if (radioAudio && volSlider) {
+        radioAudio.volume = volSlider.value / 100;
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    // Initialize radio
+    initRadio();
+    
     // Show promo modal on first visit
     showPromo();
     
