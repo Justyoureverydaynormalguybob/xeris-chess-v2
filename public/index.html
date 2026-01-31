@@ -1540,111 +1540,6 @@
         @media (min-width: 500px) { .spec-chat { max-width: 406px; } }
         @media (min-width: 900px) { .spec-chat { max-width: 606px; } .spec-chat .chat-messages { height: 120px; } }
         @media (min-width: 1400px) { .spec-chat { max-width: 686px; } }
-        
-        /* PROMO MODAL */
-        .promo-modal {
-            display: flex;
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.95);
-            z-index: 2000;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-            backdrop-filter: blur(10px);
-            animation: fadeIn 0.5s ease;
-        }
-        .promo-modal.hidden { display: none; }
-        .promo-content {
-            background: linear-gradient(135deg, var(--dark-2) 0%, var(--dark-1) 100%);
-            border: 2px solid var(--gold);
-            border-radius: 24px;
-            padding: 40px 32px;
-            max-width: 400px;
-            width: 100%;
-            text-align: center;
-            position: relative;
-            box-shadow: 0 0 60px rgba(247,147,26,0.3), 0 0 120px rgba(247,147,26,0.1);
-            animation: slideUp 0.5s ease;
-        }
-        .promo-close {
-            position: absolute;
-            top: 16px; right: 16px;
-            background: transparent;
-            border: none;
-            color: #666;
-            font-size: 20px;
-            cursor: pointer;
-            padding: 8px;
-            width: auto;
-        }
-        .promo-close:hover { color: white; }
-        .promo-badge {
-            background: linear-gradient(135deg, var(--gold-dark), var(--gold));
-            color: var(--dark-1);
-            font-family: 'Orbitron', monospace;
-            font-size: 11px;
-            font-weight: 700;
-            letter-spacing: 3px;
-            padding: 8px 20px;
-            border-radius: 20px;
-            display: inline-block;
-            margin-bottom: 20px;
-        }
-        .promo-title {
-            font-family: 'Orbitron', monospace;
-            font-size: 32px;
-            font-weight: 900;
-            letter-spacing: 3px;
-            line-height: 1.2;
-            background: linear-gradient(135deg, #fff 0%, var(--gold-light) 50%, var(--gold) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin-bottom: 24px;
-        }
-        .promo-prize {
-            margin: 24px 0;
-        }
-        .prize-amount {
-            font-family: 'Orbitron', monospace;
-            font-size: 64px;
-            font-weight: 900;
-            color: var(--gold);
-            text-shadow: 0 0 40px rgba(247,147,26,0.6);
-            display: block;
-            line-height: 1;
-        }
-        .prize-currency {
-            font-family: 'Orbitron', monospace;
-            font-size: 24px;
-            font-weight: 700;
-            color: var(--gold-light);
-            letter-spacing: 4px;
-        }
-        .promo-subtitle {
-            font-size: 14px;
-            color: #888;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            margin-bottom: 24px;
-        }
-        .promo-details {
-            margin: 24px 0;
-        }
-        .promo-detail {
-            padding: 8px 0;
-            font-size: 15px;
-            color: #ccc;
-        }
-        .promo-cta {
-            margin-top: 24px;
-        }
-        .promo-cta p {
-            color: #888;
-            font-size: 13px;
-            margin-bottom: 16px;
-        }
     </style>
 </head>
 <body>
@@ -1998,41 +1893,6 @@
         <div class="result-prize" id="resultPrize">+198 XRS</div>
         <p style="color:#666; margin:16px 0;" id="resultReason">by checkmate</p>
         <button class="btn-gold" onclick="backToLobby()">🏠 Return to Arena</button>
-    </div>
-</div>
-
-<!-- PROMO MODAL -->
-<div class="promo-modal" id="promoModal">
-    <div class="promo-content">
-        <div class="promo-badge">🔥 COMING SOON</div>
-        <div class="promo-icon">🏆</div>
-        <div class="promo-title">CHAMPIONSHIP NIGHT</div>
-        <div class="promo-subtitle">The Ultimate Chess Showdown</div>
-        
-        <div class="promo-prize">50,000</div>
-        <div class="promo-prize-label">Real XRS Prize Pool</div>
-        
-        <div class="promo-features">
-            <div class="promo-feature">
-                <span class="icon">🎟️</span>
-                <span class="text"><strong style="color:var(--green);">FREE ENTRY</strong> - No deposit required!</span>
-            </div>
-            <div class="promo-feature">
-                <span class="icon">⚔️</span>
-                <span class="text">16-player knockout bracket</span>
-            </div>
-            <div class="promo-feature">
-                <span class="icon">💰</span>
-                <span class="text">Winner takes <strong style="color:var(--gold);">50,000 XRS</strong></span>
-            </div>
-            <div class="promo-feature">
-                <span class="icon">📅</span>
-                <span class="text">Date to be announced - Stay tuned!</span>
-            </div>
-        </div>
-        
-        <button class="btn-gold" onclick="closePromo()">🎮 Start Playing Now</button>
-        <button class="promo-close" onclick="closePromo()">Remind me later</button>
     </div>
 </div>
 
@@ -2989,8 +2849,8 @@ function startTournamentGame(msg) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Show promo modal
-    showPromoIfNeeded();
+    // Show promo modal on first visit
+    showPromo();
     
     const saved = loadSession();
     if (saved?.wallet && saved?.username) {
