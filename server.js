@@ -171,6 +171,33 @@ Tournament structure:
 }
 */
 
+// Championship Interest Registration
+let championshipInterest = [];
+const CHAMPIONSHIP_FILE = path.join(__dirname, 'championship-interest.json');
+
+function loadChampionshipInterest() {
+    try {
+        if (fs.existsSync(CHAMPIONSHIP_FILE)) {
+            championshipInterest = JSON.parse(fs.readFileSync(CHAMPIONSHIP_FILE, 'utf8'));
+            console.log(`[CHAMPIONSHIP] Loaded ${championshipInterest.length} registrations`);
+        }
+    } catch (e) {
+        console.log('[CHAMPIONSHIP] No existing registrations file');
+        championshipInterest = [];
+    }
+}
+
+function saveChampionshipInterest() {
+    try {
+        fs.writeFileSync(CHAMPIONSHIP_FILE, JSON.stringify(championshipInterest, null, 2));
+    } catch (e) {
+        console.log('[CHAMPIONSHIP] Failed to save registrations:', e.message);
+    }
+}
+
+// Load on startup
+loadChampionshipInterest();
+
 // HTTP API call helper
 function apiCall(port, endpoint) {
     return new Promise((resolve, reject) => {
@@ -683,6 +710,72 @@ const server = http.createServer((req, res) => {
         
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, tournament: activeTournament }));
+        return;
+    }
+    
+    // Championship Interest Registration
+    if (req.url === '/api/championship/register' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+            try {
+                const data = JSON.parse(body);
+                const name = String(data.name || '').trim().slice(0, 30);
+                const contact = String(data.contact || '').trim().slice(0, 50);
+                const wallet = String(data.wallet || '').trim().slice(0, 60);
+                
+                if (!name || name.length < 2) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Name required' }));
+                    return;
+                }
+                
+                // Add to interest list
+                championshipInterest.push({
+                    name,
+                    contact,
+                    wallet,
+                    timestamp: Date.now()
+                });
+                
+                // Save to file
+                saveChampionshipInterest();
+                
+                console.log(`[CHAMPIONSHIP] Interest registered: ${name} (${contact || 'no contact'})`);
+                
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, count: championshipInterest.length }));
+            } catch (e) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Invalid request' }));
+            }
+        });
+        return;
+    }
+    
+    // Championship Interest Count
+    if (req.url === '/api/championship/count') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ count: championshipInterest.length }));
+        return;
+    }
+    
+    // Admin: View Championship Registrations
+    if (req.url.startsWith('/api/championship/list')) {
+        const url = new URL(req.url, `http://${req.headers.host}`);
+        const adminKey = url.searchParams.get('key');
+        
+        if (adminKey !== (process.env.ADMIN_KEY || 'xerisadmin')) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Unauthorized' }));
+            return;
+        }
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+            count: championshipInterest.length,
+            registrations: championshipInterest 
+        }));
         return;
     }
     

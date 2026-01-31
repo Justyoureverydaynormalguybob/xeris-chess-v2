@@ -1701,6 +1701,31 @@
                 <p style="color:#555; text-align:center;">No tournament active</p>
             </div>
         </div>
+        
+        <!-- Championship Interest Registration -->
+        <div class="card" style="margin-top:16px;">
+            <div class="card-title">🏆 Championship Night - 50K XRS</div>
+            <div class="championship-promo">
+                <p style="color:#888; font-size:14px; margin-bottom:16px;">Register your interest for the upcoming Championship Night with a <span style="color:var(--gold); font-weight:700;">50,000 XRS</span> prize pool!</p>
+                
+                <div id="championshipRegForm">
+                    <input type="text" id="championshipName" placeholder="Your name / username" maxlength="30" style="margin-bottom:10px;">
+                    <input type="text" id="championshipContact" placeholder="Discord / Telegram / Twitter (optional)" maxlength="50" style="margin-bottom:10px;">
+                    <button class="btn-gold" onclick="registerChampionshipInterest()">🎟️ Register Interest</button>
+                </div>
+                
+                <div id="championshipRegSuccess" style="display:none;">
+                    <div style="font-size:32px; margin-bottom:12px;">✅</div>
+                    <p style="color:var(--green); font-weight:700;">You're registered!</p>
+                    <p style="color:#888; font-size:13px; margin-top:8px;">We'll announce the date soon. Keep practicing!</p>
+                </div>
+                
+                <div class="championship-stats" style="margin-top:20px; padding-top:16px; border-top:1px solid var(--dark-4);">
+                    <span style="color:#888;">Registered players:</span>
+                    <span id="championshipCount" style="color:var(--gold); font-weight:700;">0</span>
+                </div>
+            </div>
+        </div>
     </div>
     
     <div class="tab-content" id="leaderboardTab">
@@ -2162,6 +2187,7 @@ function switchTab(tab) {
         tabs[2].classList.add('active');
         document.getElementById('tournamentTab').classList.add('active');
         send({ type: 'get_tournament' });
+        loadChampionshipCount();
     } else {
         tabs[3].classList.add('active');
         document.getElementById('leaderboardTab').classList.add('active');
@@ -2881,6 +2907,50 @@ function startTournamentGame(msg) {
     show('gameScreen');
     renderBoard();
     updateTurn(msg.turn);
+}
+
+// Championship Interest Registration
+function registerChampionshipInterest() {
+    const name = document.getElementById('championshipName').value.trim();
+    const contact = document.getElementById('championshipContact').value.trim();
+    
+    if (!name || name.length < 2) {
+        alert('Please enter your name (at least 2 characters)');
+        return;
+    }
+    
+    fetch('/api/championship/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, contact, wallet: myWallet || 'anonymous' })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('championshipRegForm').style.display = 'none';
+            document.getElementById('championshipRegSuccess').style.display = 'block';
+            document.getElementById('championshipCount').textContent = data.count;
+            localStorage.setItem('championshipRegistered', 'true');
+        } else {
+            alert(data.error || 'Registration failed');
+        }
+    })
+    .catch(() => alert('Registration failed. Try again.'));
+}
+
+function loadChampionshipCount() {
+    fetch('/api/championship/count')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('championshipCount').textContent = data.count || 0;
+            
+            // Check if already registered
+            if (localStorage.getItem('championshipRegistered')) {
+                document.getElementById('championshipRegForm').style.display = 'none';
+                document.getElementById('championshipRegSuccess').style.display = 'block';
+            }
+        })
+        .catch(() => {});
 }
 
 document.addEventListener('DOMContentLoaded', () => {
