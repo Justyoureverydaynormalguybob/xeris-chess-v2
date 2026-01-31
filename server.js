@@ -749,14 +749,86 @@ async function handleMessage(playerId, msg) {
         case 'connect_wallet':
             player.wallet = msg.wallet;
             const existingUser = getUser(msg.wallet);
+            
+            // Check if this wallet is in an active game (reconnection)
+            let activeGame = null;
+            let activeGameId = null;
+            let playerColor = null;
+            
+            // Clear any pending disconnect timeout
+            if (disconnectedPlayers.has(msg.wallet)) {
+                const disconnectInfo = disconnectedPlayers.get(msg.wallet);
+                activeGameId = disconnectInfo.gameId;
+                playerColor = disconnectInfo.color;
+                activeGame = games.get(activeGameId);
+                disconnectedPlayers.delete(msg.wallet);
+                console.log(`[RECONNECT] ${msg.wallet.slice(0,8)}... cleared disconnect timer`);
+            } else if (msg.reconnect) {
+                // Also check games directly
+                for (const [gid, game] of games) {
+                    if (game.started && !game.ended) {
+                        if (game.whiteWallet === msg.wallet) {
+                            activeGame = game;
+                            activeGameId = gid;
+                            playerColor = 'white';
+                            break;
+                        } else if (game.blackWallet === msg.wallet) {
+                            activeGame = game;
+                            activeGameId = gid;
+                            playerColor = 'black';
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // Update player reference in game if reconnecting
+            if (activeGame && activeGameId) {
+                if (playerColor === 'white') {
+                    activeGame.white = playerId;
+                } else {
+                    activeGame.black = playerId;
+                }
+            }
+            
             if (existingUser) {
                 player.username = existingUser.username;
-                send(player.ws, { 
-                    type: 'wallet_connected', 
-                    existingUsername: existingUser.username,
-                    stats: existingUser
-                });
-                console.log(`[WALLET] ${playerId} -> ${msg.wallet.slice(0,8)}... (${existingUser.username})`);
+                
+                // If reconnecting to active game
+                if (activeGame) {
+                    player.gameId = activeGameId;
+                    player.color = playerColor;
+                    player.deposited = true;
+                    
+                    send(player.ws, { 
+                        type: 'wallet_connected', 
+                        existingUsername: existingUser.username,
+                        stats: existingUser
+                    });
+                    
+                    // Send reconnected message with game state
+                    send(player.ws, {
+                        type: 'reconnected',
+                        inGame: true,
+                        gameId: activeGameId,
+                        color: playerColor,
+                        fen: activeGame.chess.fen(),
+                        turn: activeGame.chess.turn() === 'w' ? 'white' : 'black',
+                        inCheck: activeGame.chess.inCheck(),
+                        pot: activeGame.pot,
+                        whiteName: activeGame.whiteName,
+                        blackName: activeGame.blackName
+                    });
+                    
+                    console.log(`[RECONNECT] ${playerId} -> ${msg.wallet.slice(0,8)}... rejoined game ${activeGameId} as ${playerColor}`);
+                } else {
+                    send(player.ws, { 
+                        type: 'wallet_connected', 
+                        existingUsername: existingUser.username,
+                        stats: existingUser
+                    });
+                    console.log(`[WALLET] ${playerId} -> ${msg.wallet.slice(0,8)}... (${existingUser.username})`);
+                }
             } else {
                 send(player.ws, { type: 'wallet_connected', existingUsername: null });
                 console.log(`[WALLET] ${playerId} -> ${msg.wallet.slice(0,8)}... (new user)`);
@@ -875,6 +947,14 @@ async function handleMessage(playerId, msg) {
             
         case 'leave_tournament':
             handleLeaveTournament(playerId);
+            break;
+            
+        case 'ping':
+            send(player.ws, { type: 'pong' });
+            break;
+            
+        case 'chat':
+            handleChat(playerId, msg.message);
             break;
     }
 }
@@ -1280,6 +1360,41 @@ function handleResign(playerId) {
     endGame(player.gameId, winner, 'resignation');
 }
 
+function handleChat(playerId, text) {
+    const player = players.get(playerId);
+    if (!player?.gameId || !player.username || !text) return;
+    
+    const game = games.get(player.gameId);
+    if (!game || !game.started) return;
+    
+    // Sanitize and limit text
+    const safeText = String(text).trim().slice(0, 100);
+    if (!safeText) return;
+    
+    const chatMsg = {
+        type: 'chat',
+        sender: player.username,
+        text: safeText
+    };
+    
+    // Send to both players
+    const whitePlayer = players.get(game.white);
+    const blackPlayer = players.get(game.black);
+    if (whitePlayer) send(whitePlayer.ws, chatMsg);
+    if (blackPlayer) send(blackPlayer.ws, chatMsg);
+    
+    // Also send to spectators
+    if (game.spectators) {
+        game.spectators.forEach(specId => {
+            const spec = players.get(specId);
+            if (spec) send(spec.ws, chatMsg);
+        });
+    }
+}
+
+// Track disconnected players for reconnection grace period
+const disconnectedPlayers = new Map(); // wallet -> { gameId, color, timestamp }
+
 function handleDisconnect(playerId) {
     // Remove from all waiting pools
     for (const [bet, pid] of waitingPlayers) {
@@ -1299,13 +1414,35 @@ function handleDisconnect(playerId) {
         }
     }
     
-    // Handle player disconnect
-    if (player?.gameId) {
+    // Handle player in game disconnect - give grace period for reconnection
+    if (player?.gameId && player?.wallet) {
         const game = games.get(player.gameId);
-        if (game?.started) {
-            const winner = player.color === 'white' ? 'black' : 'white';
-            endGame(player.gameId, winner, 'opponent disconnected');
-        } else if (game) {
+        if (game?.started && !game.ended) {
+            // Store disconnect info for potential reconnection
+            disconnectedPlayers.set(player.wallet, {
+                gameId: player.gameId,
+                color: player.color,
+                timestamp: Date.now()
+            });
+            
+            // Set timeout to forfeit if not reconnected (60 seconds)
+            setTimeout(() => {
+                const disconnectInfo = disconnectedPlayers.get(player.wallet);
+                if (disconnectInfo && disconnectInfo.gameId === player.gameId) {
+                    // Still disconnected, forfeit
+                    const gameStillActive = games.get(player.gameId);
+                    if (gameStillActive && gameStillActive.started && !gameStillActive.ended) {
+                        const winner = player.color === 'white' ? 'black' : 'white';
+                        endGame(player.gameId, winner, 'opponent disconnected');
+                        console.log(`[FORFEIT] ${player.wallet.slice(0,8)}... timed out after 60s`);
+                    }
+                    disconnectedPlayers.delete(player.wallet);
+                }
+            }, 60000); // 60 second grace period
+            
+            console.log(`[DISCONNECT] ${player.wallet.slice(0,8)}... - 60s grace period started`);
+            return; // Don't immediately end game
+        } else if (game && !game.started) {
             // Game not started - refund deposits
             refundDeposits(player.gameId, 'opponent left before game started');
         }
@@ -1354,7 +1491,10 @@ function checkGameOver(gameId) {
 
 async function endGame(gameId, result, reason) {
     const game = games.get(gameId);
-    if (!game) return;
+    if (!game || game.ended) return;
+    
+    // Mark as ended immediately to prevent double processing
+    game.ended = true;
     
     const betAmount = game.bet || DEFAULT_BET_AMOUNT;
     const winnerPrize = Math.floor(game.pot * WINNER_PERCENT / 100);

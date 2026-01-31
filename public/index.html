@@ -982,6 +982,186 @@
             50% { opacity: 0.5; }
         }
         
+        /* IN-GAME CHAT */
+        .game-chat {
+            width: 100%;
+            max-width: 326px;
+            margin: 12px auto;
+            background: var(--dark-3);
+            border: 1px solid var(--dark-4);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .chat-messages {
+            height: 80px;
+            overflow-y: auto;
+            padding: 10px;
+            font-size: 13px;
+        }
+        .chat-msg {
+            margin: 4px 0;
+            word-wrap: break-word;
+        }
+        .chat-msg .sender {
+            font-weight: 700;
+            color: var(--gold);
+        }
+        .chat-msg .text {
+            color: #ccc;
+        }
+        .chat-msg.system {
+            color: #666;
+            font-style: italic;
+            font-size: 11px;
+        }
+        .chat-input-row {
+            display: flex;
+            border-top: 1px solid var(--dark-4);
+        }
+        .chat-input-row input {
+            flex: 1;
+            border: none;
+            border-radius: 0;
+            background: var(--dark-2);
+            padding: 10px 12px;
+            font-size: 13px;
+            margin: 0;
+        }
+        .chat-input-row input:focus {
+            box-shadow: none;
+        }
+        .chat-send-btn {
+            background: var(--gold);
+            color: var(--dark-1);
+            border: none;
+            padding: 10px 16px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 0;
+            width: auto;
+            margin: 0;
+        }
+        .chat-send-btn:hover {
+            background: var(--gold-light);
+        }
+        @media (min-width: 500px) { .game-chat { max-width: 406px; } }
+        @media (min-width: 900px) { .game-chat { max-width: 606px; } }
+        @media (min-width: 1400px) { .game-chat { max-width: 686px; } }
+        
+        /* PROMO MODAL */
+        .promo-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.95);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            backdrop-filter: blur(15px);
+        }
+        .promo-modal.active { display: flex; }
+        .promo-content {
+            background: linear-gradient(135deg, var(--dark-2) 0%, var(--dark-1) 100%);
+            border: 2px solid var(--gold);
+            border-radius: 24px;
+            padding: 32px 24px;
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 0 60px rgba(247,147,26,0.4);
+            animation: promoSlide 0.5s ease;
+        }
+        @keyframes promoSlide {
+            from { transform: scale(0.8) translateY(-30px); opacity: 0; }
+            to { transform: scale(1) translateY(0); opacity: 1; }
+        }
+        .promo-content::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--gold), var(--green), var(--gold));
+        }
+        .promo-badge {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-family: 'Orbitron', monospace;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            display: inline-block;
+            margin-bottom: 16px;
+            animation: pulse-red 1s infinite;
+        }
+        .promo-icon {
+            font-size: 72px;
+            margin: 16px 0;
+            animation: bounce 2s ease infinite;
+        }
+        .promo-title {
+            font-family: 'Orbitron', monospace;
+            font-size: 26px;
+            font-weight: 900;
+            background: linear-gradient(135deg, var(--gold), var(--gold-light));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: 2px;
+            margin-bottom: 8px;
+        }
+        .promo-subtitle {
+            font-size: 16px;
+            color: #888;
+            margin-bottom: 20px;
+        }
+        .promo-prize {
+            font-family: 'Orbitron', monospace;
+            font-size: 48px;
+            font-weight: 900;
+            color: var(--gold);
+            text-shadow: 0 0 40px rgba(247,147,26,0.6);
+            margin: 16px 0;
+        }
+        .promo-prize-label {
+            color: var(--green);
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        .promo-features {
+            margin: 24px 0;
+            text-align: left;
+        }
+        .promo-feature {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--dark-4);
+            font-size: 14px;
+        }
+        .promo-feature:last-child { border-bottom: none; }
+        .promo-feature .icon { font-size: 20px; }
+        .promo-feature .text { color: #ccc; }
+        .promo-close {
+            background: transparent;
+            border: 1px solid #555;
+            color: #888;
+            padding: 12px 24px;
+            font-size: 14px;
+            margin-top: 8px;
+        }
+        .promo-close:hover {
+            border-color: var(--gold);
+            color: var(--gold);
+        }
+        
         /* LIVE GAME ITEM */
         .live-game-item {
             display: flex;
@@ -1084,9 +1264,413 @@
             0%, 100% { transform: translateY(0); }
             50% { transform: translateY(-8px); }
         }
+        
+        /* GAME LAYOUT */
+        .game-layout {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 24px;
+            width: 100%;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 16px;
+        }
+        .game-board-area {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        
+        /* SIDE CHAT - Hidden on mobile, shown on desktop */
+        .side-chat {
+            display: none;
+            width: 260px;
+            min-height: 400px;
+            max-height: 600px;
+            background: linear-gradient(180deg, var(--dark-3) 0%, var(--dark-2) 100%);
+            border: 1px solid var(--dark-4);
+            border-radius: 16px;
+            overflow: hidden;
+            flex-direction: column;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .side-chat-header {
+            background: linear-gradient(135deg, var(--gold-dark), var(--gold));
+            color: var(--dark-1);
+            padding: 14px 18px;
+            font-family: 'Orbitron', monospace;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-align: center;
+        }
+        .side-chat .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 14px;
+            font-size: 13px;
+            background: var(--dark-2);
+            min-height: 300px;
+        }
+        .side-chat .chat-input-row {
+            border-top: 1px solid var(--dark-4);
+            background: var(--dark-3);
+        }
+        .side-chat .chat-input-row input {
+            border: none;
+            border-radius: 0;
+            background: var(--dark-2);
+            padding: 14px;
+            font-size: 13px;
+            margin: 0;
+        }
+        .side-chat .chat-input-row input:focus {
+            background: var(--dark-1);
+        }
+        
+        /* Show side chat on desktop (when there's room beside the board) */
+        @media (min-width: 900px) {
+            .side-chat {
+                display: flex;
+                height: 480px;
+            }
+        }
+        @media (min-width: 1100px) {
+            .side-chat {
+                width: 300px;
+                height: 540px;
+            }
+        }
+        @media (min-width: 1400px) {
+            .side-chat {
+                width: 340px;
+                height: 620px;
+            }
+            .game-layout {
+                gap: 32px;
+            }
+        }
+        
+        /* MOBILE CHAT BUTTON */
+        .mobile-chat-btn {
+            position: fixed;
+            bottom: 100px;
+            right: 20px;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--gold-dark), var(--gold));
+            color: var(--dark-1);
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 20px rgba(247,147,26,0.5);
+            z-index: 50;
+            transition: transform 0.3s ease;
+        }
+        .mobile-chat-btn:hover {
+            transform: scale(1.1);
+        }
+        .mobile-chat-btn.has-new {
+            animation: chat-pulse 1s infinite;
+        }
+        @keyframes chat-pulse {
+            0%, 100% { box-shadow: 0 4px 20px rgba(247,147,26,0.5); }
+            50% { box-shadow: 0 4px 30px rgba(247,147,26,0.9), 0 0 0 8px rgba(247,147,26,0.3); }
+        }
+        .chat-badge {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            background: #ef4444;
+            color: white;
+            font-size: 11px;
+            font-weight: 700;
+            min-width: 20px;
+            height: 20px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Orbitron', monospace;
+        }
+        .chat-badge:empty, .chat-badge.hidden {
+            display: none;
+        }
+        
+        /* MOBILE CHAT MODAL */
+        .mobile-chat-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.9);
+            z-index: 100;
+            padding: 20px;
+            align-items: flex-end;
+            justify-content: center;
+        }
+        .mobile-chat-modal.active {
+            display: flex;
+        }
+        .mobile-chat-content {
+            width: 100%;
+            max-width: 500px;
+            height: 70vh;
+            max-height: 500px;
+            background: var(--dark-2);
+            border: 1px solid var(--dark-4);
+            border-radius: 20px 20px 0 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            animation: slideUp 0.3s ease;
+        }
+        .mobile-chat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(135deg, var(--gold-dark), var(--gold));
+            color: var(--dark-1);
+            padding: 14px 16px;
+            font-family: 'Orbitron', monospace;
+            font-size: 13px;
+            font-weight: 700;
+        }
+        .mobile-chat-close {
+            background: transparent;
+            border: none;
+            color: var(--dark-1);
+            font-size: 20px;
+            cursor: pointer;
+            padding: 4px 8px;
+            width: auto;
+        }
+        .mobile-chat-content .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            font-size: 14px;
+        }
+        .mobile-chat-content .chat-input-row {
+            border-top: 1px solid var(--dark-4);
+        }
+        .mobile-chat-content .chat-input-row input {
+            border: none;
+            border-radius: 0;
+            background: var(--dark-3);
+            padding: 14px 16px;
+            font-size: 15px;
+            margin: 0;
+        }
+        
+        /* CHAT COMMON STYLES */
+        .chat-messages {
+            background: var(--dark-2);
+        }
+        .chat-msg {
+            margin: 6px 0;
+            word-wrap: break-word;
+            line-height: 1.4;
+        }
+        .chat-msg .sender {
+            font-weight: 700;
+            color: var(--gold);
+        }
+        .chat-msg .sender.opponent {
+            color: var(--green);
+        }
+        .chat-msg .text {
+            color: #ccc;
+        }
+        .chat-input-row {
+            display: flex;
+        }
+        .chat-input-row input {
+            flex: 1;
+        }
+        .chat-send-btn {
+            background: var(--gold);
+            border: none;
+            color: var(--dark-1);
+            padding: 12px 18px;
+            font-size: 18px;
+            cursor: pointer;
+            width: auto;
+            margin: 0;
+            border-radius: 0;
+        }
+        .chat-send-btn:hover {
+            background: var(--gold-light);
+        }
+        
+        /* Hide mobile chat btn on desktop when side chat is visible */
+        @media (min-width: 900px) {
+            .mobile-chat-btn {
+                display: none !important;
+            }
+        }
+        
+        /* SPECTATE CHAT (read-only) */
+        .spec-chat {
+            width: 100%;
+            max-width: 326px;
+            margin: 12px auto;
+            background: var(--dark-3);
+            border: 1px solid var(--dark-4);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .spec-chat-header {
+            background: var(--purple);
+            color: white;
+            padding: 10px 14px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .spec-chat .chat-messages {
+            height: 100px;
+            overflow-y: auto;
+            padding: 10px;
+            font-size: 13px;
+        }
+        @media (min-width: 500px) { .spec-chat { max-width: 406px; } }
+        @media (min-width: 900px) { .spec-chat { max-width: 606px; } .spec-chat .chat-messages { height: 120px; } }
+        @media (min-width: 1400px) { .spec-chat { max-width: 686px; } }
+        
+        /* PROMO MODAL */
+        .promo-modal {
+            display: flex;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.95);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+            animation: fadeIn 0.5s ease;
+        }
+        .promo-modal.hidden { display: none; }
+        .promo-content {
+            background: linear-gradient(135deg, var(--dark-2) 0%, var(--dark-1) 100%);
+            border: 2px solid var(--gold);
+            border-radius: 24px;
+            padding: 40px 32px;
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+            position: relative;
+            box-shadow: 0 0 60px rgba(247,147,26,0.3), 0 0 120px rgba(247,147,26,0.1);
+            animation: slideUp 0.5s ease;
+        }
+        .promo-close {
+            position: absolute;
+            top: 16px; right: 16px;
+            background: transparent;
+            border: none;
+            color: #666;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 8px;
+            width: auto;
+        }
+        .promo-close:hover { color: white; }
+        .promo-badge {
+            background: linear-gradient(135deg, var(--gold-dark), var(--gold));
+            color: var(--dark-1);
+            font-family: 'Orbitron', monospace;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 3px;
+            padding: 8px 20px;
+            border-radius: 20px;
+            display: inline-block;
+            margin-bottom: 20px;
+        }
+        .promo-title {
+            font-family: 'Orbitron', monospace;
+            font-size: 32px;
+            font-weight: 900;
+            letter-spacing: 3px;
+            line-height: 1.2;
+            background: linear-gradient(135deg, #fff 0%, var(--gold-light) 50%, var(--gold) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 24px;
+        }
+        .promo-prize {
+            margin: 24px 0;
+        }
+        .prize-amount {
+            font-family: 'Orbitron', monospace;
+            font-size: 64px;
+            font-weight: 900;
+            color: var(--gold);
+            text-shadow: 0 0 40px rgba(247,147,26,0.6);
+            display: block;
+            line-height: 1;
+        }
+        .prize-currency {
+            font-family: 'Orbitron', monospace;
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--gold-light);
+            letter-spacing: 4px;
+        }
+        .promo-subtitle {
+            font-size: 14px;
+            color: #888;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 24px;
+        }
+        .promo-details {
+            margin: 24px 0;
+        }
+        .promo-detail {
+            padding: 8px 0;
+            font-size: 15px;
+            color: #ccc;
+        }
+        .promo-cta {
+            margin-top: 24px;
+        }
+        .promo-cta p {
+            color: #888;
+            font-size: 13px;
+            margin-bottom: 16px;
+        }
     </style>
 </head>
 <body>
+
+<!-- PROMO MODAL -->
+<div class="promo-modal" id="promoModal">
+    <div class="promo-content">
+        <button class="promo-close" onclick="closePromo()">✕</button>
+        <div class="promo-badge">🏆 COMING SOON</div>
+        <div class="promo-title">CHAMPIONSHIP<br>NIGHT</div>
+        <div class="promo-prize">
+            <span class="prize-amount">50,000</span>
+            <span class="prize-currency">XRS</span>
+        </div>
+        <div class="promo-subtitle">REAL XERIS PRIZE POOL</div>
+        <div class="promo-details">
+            <div class="promo-detail">🎮 8-16 Player Knockout</div>
+            <div class="promo-detail">⚔️ Winner Takes All</div>
+            <div class="promo-detail">📅 Date TBA</div>
+        </div>
+        <div class="promo-cta">
+            <p>Practice now & climb the leaderboard!</p>
+            <button class="btn-gold" onclick="closePromo()">🎯 Start Playing</button>
+        </div>
+    </div>
+</div>
 
 <!-- CONNECT WALLET SCREEN -->
 <div class="screen active" id="connectScreen">
@@ -1300,9 +1884,49 @@
     
     <div class="game-status" id="gameStatus">Your turn</div>
     <div class="check-alert" id="checkAlert" style="display:none;">⚠️ CHECK!</div>
-    <div id="board"></div>
-    <div id="moves">Game moves appear here...</div>
+    
+    <!-- Game Layout: Board + Side Chat -->
+    <div class="game-layout">
+        <div class="game-board-area">
+            <div id="board"></div>
+            <div id="moves">Game moves appear here...</div>
+        </div>
+        
+        <!-- Desktop Side Chat -->
+        <div class="side-chat" id="sideChat">
+            <div class="side-chat-header">
+                <span>💬 Game Chat</span>
+            </div>
+            <div class="chat-messages" id="chatMessages"></div>
+            <div class="chat-input-row">
+                <input type="text" id="chatInput" placeholder="Type message..." maxlength="100" onkeypress="if(event.key==='Enter')sendChat()">
+                <button class="chat-send-btn" onclick="sendChat()">➤</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Mobile Chat Button -->
+    <div class="mobile-chat-btn" id="mobileChatBtn" onclick="openMobileChat()">
+        💬
+        <span class="chat-badge hidden" id="chatBadge">0</span>
+    </div>
+    
     <button class="btn-danger btn-small" onclick="resign()" style="margin-top:12px;">🏳️ Surrender</button>
+    
+    <!-- Mobile Chat Modal -->
+    <div class="mobile-chat-modal" id="mobileChatModal">
+        <div class="mobile-chat-content">
+            <div class="mobile-chat-header">
+                <span>💬 Game Chat</span>
+                <button class="mobile-chat-close" onclick="closeMobileChat()">✕</button>
+            </div>
+            <div class="chat-messages" id="mobileChatMessages"></div>
+            <div class="chat-input-row">
+                <input type="text" id="mobileChatInput" placeholder="Type message..." maxlength="100" onkeypress="if(event.key==='Enter')sendMobileChat()">
+                <button class="chat-send-btn" onclick="sendMobileChat()">➤</button>
+            </div>
+        </div>
+    </div>
     
     <!-- Game Over Overlay -->
     <div class="game-over-overlay" id="gameOverOverlay">
@@ -1341,6 +1965,13 @@
     <div class="check-alert" id="specCheckAlert" style="display:none;">⚠️ CHECK!</div>
     <div id="specBoard"></div>
     <div id="specMoves">Game moves appear here...</div>
+    
+    <!-- Spectate Chat (read-only view) -->
+    <div class="spec-chat">
+        <div class="spec-chat-header">💬 Live Chat</div>
+        <div class="chat-messages" id="specChatMessages"></div>
+    </div>
+    
     <button class="btn-secondary btn-small" onclick="leaveSpectate()" style="margin-top:12px;">← Leave</button>
     
     <!-- Spectate Game Over Overlay -->
@@ -1367,6 +1998,41 @@
         <div class="result-prize" id="resultPrize">+198 XRS</div>
         <p style="color:#666; margin:16px 0;" id="resultReason">by checkmate</p>
         <button class="btn-gold" onclick="backToLobby()">🏠 Return to Arena</button>
+    </div>
+</div>
+
+<!-- PROMO MODAL -->
+<div class="promo-modal" id="promoModal">
+    <div class="promo-content">
+        <div class="promo-badge">🔥 COMING SOON</div>
+        <div class="promo-icon">🏆</div>
+        <div class="promo-title">CHAMPIONSHIP NIGHT</div>
+        <div class="promo-subtitle">The Ultimate Chess Showdown</div>
+        
+        <div class="promo-prize">50,000</div>
+        <div class="promo-prize-label">Real XRS Prize Pool</div>
+        
+        <div class="promo-features">
+            <div class="promo-feature">
+                <span class="icon">🎟️</span>
+                <span class="text"><strong style="color:var(--green);">FREE ENTRY</strong> - No deposit required!</span>
+            </div>
+            <div class="promo-feature">
+                <span class="icon">⚔️</span>
+                <span class="text">16-player knockout bracket</span>
+            </div>
+            <div class="promo-feature">
+                <span class="icon">💰</span>
+                <span class="text">Winner takes <strong style="color:var(--gold);">50,000 XRS</strong></span>
+            </div>
+            <div class="promo-feature">
+                <span class="icon">📅</span>
+                <span class="text">Date to be announced - Stay tuned!</span>
+            </div>
+        </div>
+        
+        <button class="btn-gold" onclick="closePromo()">🎮 Start Playing Now</button>
+        <button class="promo-close" onclick="closePromo()">Remind me later</button>
     </div>
 </div>
 
@@ -1419,10 +2085,155 @@ function updateBetDisplay() {
     document.getElementById('winnerTakesDisplay').textContent = Math.floor(selectedBet * 2 * 0.99).toLocaleString();
 }
 
+// Promo modal
+let promoShown = false;
+
+function showPromo() {
+    if (promoShown) return;
+    // Check if already seen this session
+    if (sessionStorage.getItem('promoSeen')) return;
+    document.getElementById('promoModal').classList.add('active');
+}
+
+function closePromo() {
+    document.getElementById('promoModal').classList.remove('active');
+    promoShown = true;
+    sessionStorage.setItem('promoSeen', 'true');
+}
+
+// In-game chat
+let unreadChatCount = 0;
+let mobileChatOpen = false;
+
+function sendChat() {
+    const input = document.getElementById('chatInput');
+    const text = input.value.trim();
+    if (!text || !myGameId) return;
+    
+    send({ type: 'chat', text });
+    input.value = '';
+}
+
+function sendMobileChat() {
+    const input = document.getElementById('mobileChatInput');
+    const text = input.value.trim();
+    if (!text || !myGameId) return;
+    
+    send({ type: 'chat', text });
+    input.value = '';
+}
+
+function displayChat(msg) {
+    const isMe = msg.sender === myUsername;
+    const msgHtml = `<div class="chat-msg"><span class="sender ${isMe ? '' : 'opponent'}">${esc(msg.sender)}:</span> <span class="text">${esc(msg.text)}</span></div>`;
+    
+    // Add to desktop chat
+    const desktopChat = document.getElementById('chatMessages');
+    if (desktopChat) {
+        desktopChat.innerHTML += msgHtml;
+        desktopChat.scrollTop = desktopChat.scrollHeight;
+        // Keep only last 50 messages
+        while (desktopChat.children.length > 50) {
+            desktopChat.removeChild(desktopChat.firstChild);
+        }
+    }
+    
+    // Add to mobile chat
+    const mobileChat = document.getElementById('mobileChatMessages');
+    if (mobileChat) {
+        mobileChat.innerHTML += msgHtml;
+        mobileChat.scrollTop = mobileChat.scrollHeight;
+        while (mobileChat.children.length > 50) {
+            mobileChat.removeChild(mobileChat.firstChild);
+        }
+    }
+    
+    // Add to spectate chat if spectating
+    if (isSpectating) {
+        const specChat = document.getElementById('specChatMessages');
+        if (specChat) {
+            specChat.innerHTML += msgHtml;
+            specChat.scrollTop = specChat.scrollHeight;
+        }
+    }
+    
+    // Update mobile notification badge if chat not open and on mobile
+    if (!mobileChatOpen && !isMe && window.innerWidth < 1000) {
+        unreadChatCount++;
+        updateChatBadge();
+        // Add pulse animation
+        document.getElementById('mobileChatBtn')?.classList.add('has-new');
+    }
+}
+
+function updateChatBadge() {
+    const badge = document.getElementById('chatBadge');
+    if (badge) {
+        if (unreadChatCount > 0) {
+            badge.textContent = unreadChatCount > 9 ? '9+' : unreadChatCount;
+            badge.classList.remove('hidden');
+        } else {
+            badge.classList.add('hidden');
+        }
+    }
+}
+
+function openMobileChat() {
+    mobileChatOpen = true;
+    unreadChatCount = 0;
+    updateChatBadge();
+    document.getElementById('mobileChatBtn')?.classList.remove('has-new');
+    document.getElementById('mobileChatModal')?.classList.add('active');
+    document.getElementById('mobileChatInput')?.focus();
+}
+
+function closeMobileChat() {
+    mobileChatOpen = false;
+    document.getElementById('mobileChatModal')?.classList.remove('active');
+}
+
+function clearChat() {
+    const desktopChat = document.getElementById('chatMessages');
+    const mobileChat = document.getElementById('mobileChatMessages');
+    if (desktopChat) desktopChat.innerHTML = '';
+    if (mobileChat) mobileChat.innerHTML = '';
+    unreadChatCount = 0;
+    updateChatBadge();
+    document.getElementById('mobileChatBtn')?.classList.remove('has-new');
+}
+
 function saveSession() {
     if (myWallet && myUsername) {
         localStorage.setItem('xerisChess', JSON.stringify({ wallet: myWallet, username: myUsername, stats: myStats }));
     }
+}
+
+function saveGameState() {
+    if (myGameId && myColor) {
+        sessionStorage.setItem('xerisGameState', JSON.stringify({
+            gameId: myGameId,
+            color: myColor,
+            timestamp: Date.now()
+        }));
+    }
+}
+
+function loadGameState() {
+    try {
+        const saved = sessionStorage.getItem('xerisGameState');
+        if (!saved) return null;
+        const state = JSON.parse(saved);
+        // Only restore if less than 10 minutes old
+        if (Date.now() - state.timestamp > 10 * 60 * 1000) {
+            sessionStorage.removeItem('xerisGameState');
+            return null;
+        }
+        return state;
+    } catch (e) { return null; }
+}
+
+function clearGameState() {
+    sessionStorage.removeItem('xerisGameState');
 }
 
 function loadSession() {
@@ -1465,10 +2276,114 @@ function switchTab(tab) {
 function initWebSocket() {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     ws = new WebSocket(`${protocol}//${location.host}`);
-    ws.onopen = () => { if (myWallet) send({ type: 'connect_wallet', wallet: myWallet }); };
+    
+    ws.onopen = () => {
+        console.log('[WS] Connected');
+        if (myWallet) {
+            // Try to reconnect with existing session and game state
+            const gameState = loadGameState();
+            send({ 
+                type: 'connect_wallet', 
+                wallet: myWallet, 
+                reconnect: true,
+                gameId: gameState?.gameId,
+                color: gameState?.color
+            });
+        }
+        startHeartbeat();
+    };
+    
     ws.onmessage = (e) => handleMessage(JSON.parse(e.data));
-    ws.onclose = () => setTimeout(() => location.reload(), 3000);
+    
+    ws.onclose = () => {
+        console.log('[WS] Disconnected');
+        stopHeartbeat();
+        // Only auto-reconnect if we had a session and page is visible
+        if (myWallet && !document.hidden) {
+            setTimeout(() => {
+                console.log('[WS] Reconnecting...');
+                initWebSocket();
+            }, 2000);
+        }
+    };
+    
+    ws.onerror = (e) => console.log('[WS] Error', e);
 }
+
+// Handle page visibility changes
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        // Page is hidden - save state
+        saveGameState();
+    } else {
+        // Page is visible again - check connection
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+            console.log('[WS] Page visible, reconnecting...');
+            initWebSocket();
+        }
+    }
+});
+
+// Heartbeat to keep connection alive
+let heartbeatInterval = null;
+
+function startHeartbeat() {
+    stopHeartbeat();
+    heartbeatInterval = setInterval(() => {
+        if (ws?.readyState === 1) {
+            send({ type: 'ping' });
+        }
+    }, 25000); // Every 25 seconds
+}
+
+function stopHeartbeat() {
+    if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
+    }
+}
+
+// Handle page visibility change (tab switching)
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && ws?.readyState !== 1 && myWallet) {
+        console.log('[WS] Tab visible, reconnecting...');
+        initWebSocket();
+    }
+});
+
+// Prevent accidental page unload during game
+window.addEventListener('beforeunload', (e) => {
+    if (myGameId && document.getElementById('gameScreen').classList.contains('active')) {
+        e.preventDefault();
+        e.returnValue = 'You have an active game. Leaving will forfeit the match!';
+        return e.returnValue;
+    }
+});
+
+function handleReconnect(msg) {
+    console.log('[WS] Reconnected to game:', msg.gameId);
+    if (msg.inGame) {
+        myGameId = msg.gameId;
+        myColor = msg.color;
+        document.getElementById('gameWhiteName').textContent = msg.whiteName;
+        document.getElementById('gameBlackName').textContent = msg.blackName;
+        document.getElementById('gamePot').textContent = msg.pot + ' XRS';
+        parseFEN(msg.fen);
+        show('gameScreen');
+        renderBoard();
+        updateTurn(msg.turn);
+        if (msg.inCheck) {
+            document.getElementById('checkAlert').style.display = 'block';
+        }
+    }
+}
+
+// CHAT FUNCTIONS
+// Note: sendChat and addChatMessage are defined above
+
+// Note: clearChat is defined above
+
+// Note: promo functions (showPromo, closePromo) are defined above
 
 function connectWallet() {
     const addr = document.getElementById('walletInput').value.trim();
@@ -1502,6 +2417,8 @@ function handleMessage(msg) {
         case 'username_set':
             myStats = msg.stats || { wins: 0, losses: 0 };
             saveSession(); show('lobbyScreen'); updateMyInfo(); send({ type: 'get_lobby' });
+            // Show promo modal after first login
+            setTimeout(showPromo, 500);
             break;
         case 'lobby_update':
             updateLobby(msg.players, msg.leaderboard, msg.stats);
@@ -1559,6 +2476,12 @@ function handleMessage(msg) {
             break;
         case 'tournament_game_start':
             startTournamentGame(msg);
+            break;
+        case 'chat':
+            addChatMessage(msg.username, msg.message);
+            break;
+        case 'reconnected':
+            handleReconnect(msg);
             break;
     }
 }
@@ -1648,7 +2571,10 @@ function startGame(msg) {
     document.getElementById('gameBlackName').textContent = msg.blackName || 'Black';
     document.getElementById('gamePot').textContent = msg.pot + ' XRS';
     document.getElementById('moves').textContent = '';
+    clearChat(); // Clear all chat containers
+    closeMobileChat(); // Close mobile chat if open
     parseFEN(msg.fen); show('gameScreen'); renderBoard(); updateTurn(msg.turn);
+    saveGameState(); // Save for reconnection
 }
 
 function parseFEN(fen) {
@@ -1790,6 +2716,7 @@ function showResult(msg) {
 
 function goToResults() {
     document.getElementById('gameOverOverlay').classList.remove('active');
+    clearGameState(); // Game is over, clear saved state
     
     if (!pendingResult) { backToLobby(); return; }
     
@@ -1808,7 +2735,10 @@ function goToResults() {
 
 function backToLobby() {
     show('lobbyScreen'); send({ type: 'get_lobby' });
-    selectedSquare = null; lastMove = null; updateMyInfo();
+    selectedSquare = null; lastMove = null; myGameId = null; myColor = null;
+    clearGameState(); // Clear saved game state
+    clearChat();
+    updateMyInfo();
 }
 
 // SPECTATE FUNCTIONS
@@ -1846,6 +2776,7 @@ function startSpectating(msg) {
     document.getElementById('specBlackName').textContent = msg.blackName;
     document.getElementById('specPot').textContent = msg.pot + ' XRS';
     document.getElementById('specMoves').textContent = '';
+    document.getElementById('specChatMessages').innerHTML = ''; // Clear chat
     
     parseSpecFEN(msg.fen);
     show('spectateScreen');
@@ -2058,6 +2989,9 @@ function startTournamentGame(msg) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Show promo modal
+    showPromoIfNeeded();
+    
     const saved = loadSession();
     if (saved?.wallet && saved?.username) {
         myWallet = saved.wallet; myUsername = saved.username;
