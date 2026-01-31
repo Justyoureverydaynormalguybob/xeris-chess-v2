@@ -960,7 +960,7 @@ async function handleMessage(playerId, msg) {
             
         case 'challenge':
             const challengeBet = Math.min(MAX_BET, Math.max(MIN_BET, parseInt(msg.bet) || DEFAULT_BET_AMOUNT));
-            handleChallenge(playerId, msg.targetId, challengeBet);
+            handleChallenge(playerId, msg.targetId, challengeBet, msg.queued || false);
             break;
             
         case 'accept_challenge':
@@ -1175,7 +1175,7 @@ function handleLeaveSpectate(playerId) {
 }
 
 // Challenge functions
-function handleChallenge(fromId, toId, bet) {
+function handleChallenge(fromId, toId, bet, queued = false) {
     const from = players.get(fromId);
     const to = players.get(toId);
     
@@ -1184,8 +1184,30 @@ function handleChallenge(fromId, toId, bet) {
         return;
     }
     
+    // Check if target is in a game
     if (to.gameId) {
-        send(from.ws, { type: 'error', message: 'Player is already in a game' });
+        if (queued) {
+            // Add to queue
+            if (!to.challengeQueue) to.challengeQueue = [];
+            
+            // Don't allow duplicate queued challenges
+            if (to.challengeQueue.some(q => q.fromId === fromId)) {
+                send(from.ws, { type: 'error', message: 'You already have a queued challenge for this player' });
+                return;
+            }
+            
+            to.challengeQueue.push({ fromId, bet, timestamp: Date.now() });
+            send(from.ws, { type: 'challenge_queued', toUsername: to.username });
+            console.log(`[CHALLENGE] ${from.username} -> ${to.username} (QUEUED, ${bet} XRS)`);
+        } else {
+            send(from.ws, { type: 'player_in_game', toUsername: to.username, toId });
+        }
+        return;
+    }
+    
+    // Check if challenger is in a game
+    if (from.gameId) {
+        send(from.ws, { type: 'error', message: 'Finish your current game first' });
         return;
     }
     
@@ -1201,6 +1223,45 @@ function handleChallenge(fromId, toId, bet) {
     });
     
     console.log(`[CHALLENGE] ${from.username} -> ${to.username} (${bet} XRS)`);
+}
+
+function processQueuedChallenges(playerId) {
+    const player = players.get(playerId);
+    if (!player || !player.challengeQueue || player.challengeQueue.length === 0) return;
+    if (player.gameId) return; // Still in a game
+    
+    // Get the oldest queued challenge
+    const queued = player.challengeQueue.shift();
+    if (!queued) return;
+    
+    const challenger = players.get(queued.fromId);
+    if (!challenger || !challenger.ws || challenger.gameId) {
+        // Challenger disconnected or in a game, try next
+        if (player.challengeQueue.length > 0) {
+            processQueuedChallenges(playerId);
+        }
+        return;
+    }
+    
+    // Send the challenge now
+    const challengeId = 'c' + (++challengeCounter);
+    challenges.set(challengeId, { from: queued.fromId, to: playerId, timestamp: Date.now(), bet: queued.bet });
+    
+    send(player.ws, {
+        type: 'challenge_received',
+        challengeId,
+        fromUsername: challenger.username,
+        fromId: queued.fromId,
+        bet: queued.bet,
+        wasQueued: true
+    });
+    
+    send(challenger.ws, {
+        type: 'queued_challenge_sent',
+        toUsername: player.username
+    });
+    
+    console.log(`[CHALLENGE] ${challenger.username} -> ${player.username} (FROM QUEUE, ${queued.bet} XRS)`);
 }
 
 function handleAcceptChallenge(playerId, challengeId) {
@@ -1683,6 +1744,9 @@ async function endGame(gameId, result, reason) {
             p.gameId = null;
             p.color = null;
             p.deposited = false;
+            
+            // Process queued challenges after a short delay
+            setTimeout(() => processQueuedChallenges(id), 2000);
         }
     });
     
