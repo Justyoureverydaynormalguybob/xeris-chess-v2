@@ -1730,7 +1730,7 @@
         </div>
         
         <input type="text" id="walletInput" placeholder="Enter your XRS wallet address">
-        <button class="btn-gold" onclick="connectWallet()">⚡ Connect Wallet</button>
+        <button class="btn-gold" id="connectBtn" onclick="connectWallet()">⚡ Connect Wallet</button>
     </div>
     
     <div class="card">
@@ -1916,16 +1916,19 @@
         <div class="deposit-info">
             <div style="font-size:12px; color:#666; text-transform:uppercase; letter-spacing:2px;">Deposit Required</div>
             <div style="font-family:'Orbitron',monospace; font-size:36px; font-weight:900; color:var(--gold); margin:10px 0;" id="depositAmount">100 XRS</div>
-            <div style="font-size:12px; color:#666; margin-top:16px;">Send to escrow:</div>
-            <div class="escrow-addr" id="escrowAddr">Loading...</div>
-            <button class="copy-btn" onclick="copyEscrow()">📋 Copy Address</button>
+            <div id="manualDepositInfo">
+                <div style="font-size:12px; color:#666; margin-top:16px;">Send to escrow:</div>
+                <div class="escrow-addr" id="escrowAddr">Loading...</div>
+                <button class="copy-btn" onclick="copyEscrow()">📋 Copy Address</button>
+            </div>
         </div>
-        
+
         <div style="margin:20px 0; font-size:14px;">
             <p id="myDepositStatus" style="color:#888;">⏳ Your deposit: Pending</p>
             <p id="opponentDepositStatus" style="color:#888;">⏳ Opponent: Pending</p>
         </div>
-        
+
+        <button class="btn-gold" id="retryDepositBtn" onclick="retryAutoDeposit()" style="display:none;">🔄 Sign Deposit Again</button>
         <button class="btn-gold" onclick="checkDeposit()">✓ Verify Deposit</button>
         <button class="btn-secondary" onclick="cancelGame()">Cancel</button>
     </div>
@@ -2095,8 +2098,10 @@
     </div>
 </div>
 
+<script src="js/xeris-tx.js"></script>
 <script>
 let ws = null;
+let xerisWalletAvailable = false; // true if running in Xeris Wallet Browser
 let myPlayerId = null;
 let myWallet = null;
 let myUsername = null;
@@ -2548,9 +2553,64 @@ function handleReconnect(msg) {
 
 // Note: promo functions (showPromo, closePromo) are defined above
 
-function connectWallet() {
-    const addr = document.getElementById('walletInput').value.trim();
-    if (addr.length < 30) { alert('Enter a valid XRS wallet address'); return; }
+// Detect Xeris Wallet Browser and auto-connect
+async function detectXerisWallet() {
+    if (typeof window.xeris !== 'undefined') {
+        try {
+            // Try silent reconnect first
+            let resp;
+            try {
+                resp = await window.xeris.connect({ onlyIfTrusted: true });
+            } catch (e) {
+                // Not previously authorized - need explicit connect
+                return true; // wallet exists but need user action
+            }
+            const addr = extractWalletAddress(resp);
+            if (addr) {
+                xerisWalletAvailable = true;
+                document.getElementById('walletInput').value = addr;
+                document.getElementById('walletInput').disabled = true;
+                document.getElementById('connectBtn').textContent = '⚡ Connected via Xeris Wallet';
+                connectWallet();
+                return true;
+            }
+        } catch (e) {
+            console.log('[WALLET] Xeris wallet detection error:', e);
+        }
+        return true;
+    }
+    return false;
+}
+
+function extractWalletAddress(resp) {
+    if (typeof resp === 'string' && resp.length > 20) return resp;
+    if (resp && resp.publicKey) return resp.publicKey.toString();
+    if (resp && resp.address) return resp.address;
+    if (window.xeris.publicKey) return window.xeris.publicKey.toString();
+    if (window.xeris.address) return window.xeris.address;
+    return null;
+}
+
+async function connectWallet() {
+    let addr = document.getElementById('walletInput').value.trim();
+
+    // If Xeris Wallet Browser available and no address yet, do explicit connect
+    if (!addr && typeof window.xeris !== 'undefined') {
+        try {
+            const resp = await window.xeris.connect();
+            addr = extractWalletAddress(resp);
+            if (addr) {
+                xerisWalletAvailable = true;
+                document.getElementById('walletInput').value = addr;
+                document.getElementById('walletInput').disabled = true;
+            }
+        } catch (e) {
+            alert('Wallet connection cancelled');
+            return;
+        }
+    }
+
+    if (!addr || addr.length < 30) { alert('Enter a valid XRS wallet address'); return; }
     myWallet = addr;
     initWebSocket();
 }
@@ -2733,11 +2793,82 @@ function showDepositScreen(msg) {
     document.getElementById('depositOpponentColor').textContent = msg.color === 'white' ? '♚ Black' : '♔ White';
     document.getElementById('myDepositStatus').innerHTML = '⏳ Your deposit: Pending';
     document.getElementById('opponentDepositStatus').innerHTML = '⏳ Opponent: Pending';
+
+    // Auto-deposit if Xeris Wallet Browser is available
+    if (xerisWalletAvailable) {
+        autoDeposit(msg.escrow, betAmt);
+    }
 }
 
 function copyEscrow() { navigator.clipboard.writeText(document.getElementById('escrowAddr').textContent); alert('Copied!'); }
 function checkDeposit() { send({ type: 'check_deposit' }); }
 function cancelGame() { send({ type: 'cancel_game' }); show('lobbyScreen'); }
+
+// Auto-deposit via Xeris Wallet Browser (window.xeris)
+async function autoDeposit(escrowAddr, betAmount) {
+    if (!xerisWalletAvailable || typeof window.xeris === 'undefined') return;
+
+    const statusEl = document.getElementById('myDepositStatus');
+    statusEl.innerHTML = '🔄 Signing deposit transaction...';
+
+    try {
+        // 1. Encode NativeTransfer instruction
+        const lamports = BigInt(betAmount) * BigInt(LAMPORTS_PER_XRS);
+        const instructionData = XerisTx.encodeNativeTransfer(myWallet, escrowAddr, lamports);
+
+        // 2. Fetch recent blockhash
+        const blockhash = await XerisTx.fetchRecentBlockhash();
+
+        // 3. Decode signer pubkey
+        const pubkeyBytes = XerisTx.base58DecodePubkey(myWallet);
+
+        // 4-5. Build message + unsigned tx
+        const messageBytes = XerisTx.buildMessage(pubkeyBytes, instructionData, blockhash);
+        const unsignedTx = XerisTx.buildUnsignedTx(messageBytes);
+
+        statusEl.innerHTML = '✍️ Please approve in wallet...';
+
+        // 6. Send to wallet for signing (shows approval popup)
+        const walletResult = await window.xeris.signTransaction(unsignedTx);
+
+        statusEl.innerHTML = '📡 Submitting transaction...';
+
+        // 7-8. Extract signature + reassemble
+        const tx_base64 = XerisTx.resolveSignedTx(walletResult, messageBytes);
+
+        // 9. Submit via our server proxy
+        const r = await fetch('/api/xeris/submit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tx_base64 })
+        });
+        const data = await r.json();
+
+        if (!r.ok || data.error) {
+            statusEl.innerHTML = '❌ Deposit failed: ' + (data.error || 'Unknown error');
+            console.log('[DEPOSIT] Submit failed:', data);
+            return;
+        }
+
+        statusEl.innerHTML = '✅ Deposit sent! Verifying on-chain...';
+        console.log('[DEPOSIT] TX submitted, sig:', data.signature);
+
+        // Wait a moment for the tx to be included in a block, then verify
+        setTimeout(() => {
+            send({ type: 'check_deposit' });
+        }, 3000);
+
+    } catch (e) {
+        console.log('[DEPOSIT] Auto-deposit error:', e);
+        if (e.message && e.message.includes('User rejected')) {
+            statusEl.innerHTML = '⏳ Deposit cancelled. Use manual deposit or try again.';
+        } else {
+            statusEl.innerHTML = '❌ Auto-deposit failed: ' + e.message + '<br>Use manual deposit below.';
+        }
+    }
+}
+
+const LAMPORTS_PER_XRS = 1000000000;
 
 function startGame(msg) {
     myColor = msg.color; myGameId = msg.gameId;
@@ -3302,20 +3433,56 @@ function setRadioVolume() {
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+// Retry auto-deposit (when user cancelled or it failed)
+function retryAutoDeposit() {
+    const escrow = document.getElementById('escrowAddr').textContent;
+    const amount = parseInt(document.getElementById('depositAmount').textContent.replace(/[^0-9]/g, ''));
+    if (escrow && amount) autoDeposit(escrow, amount);
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
     // Initialize radio
     initRadio();
-    
+
     // Show promo modal on first visit
     showPromo();
-    
+
+    // Detect Xeris Wallet Browser
+    if (typeof window.xeris !== 'undefined') {
+        xerisWalletAvailable = true;
+        const connectBtn = document.getElementById('connectBtn');
+        connectBtn.textContent = '⚡ Connect via Xeris Wallet';
+        // Show retry deposit button for future use
+        const retryBtn = document.getElementById('retryDepositBtn');
+        if (retryBtn) retryBtn.style.display = 'block';
+    }
+
     const saved = loadSession();
     if (saved?.wallet && saved?.username) {
         myWallet = saved.wallet; myUsername = saved.username;
         myStats = saved.stats || { wins: 0, losses: 0 };
         document.getElementById('walletInput').value = myWallet;
+
+        // If in Xeris Wallet, verify the saved address matches
+        if (xerisWalletAvailable) {
+            try {
+                const resp = await window.xeris.connect({ onlyIfTrusted: true });
+                const walletAddr = extractWalletAddress(resp);
+                if (walletAddr && walletAddr !== myWallet) {
+                    // Wallet changed, update
+                    myWallet = walletAddr;
+                    document.getElementById('walletInput').value = myWallet;
+                }
+                document.getElementById('walletInput').disabled = true;
+            } catch (e) { /* not trusted yet, that's fine */ }
+        }
+
         initWebSocket();
+    } else if (xerisWalletAvailable) {
+        // Try auto-connect via Xeris Wallet
+        detectXerisWallet();
     }
+
     fetch('/api/stats').then(r => r.json()).then(d => {
         document.getElementById('globalGames').textContent = d.totalGames || 0;
         document.getElementById('globalPot').textContent = d.totalWagered || 0;

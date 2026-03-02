@@ -427,42 +427,229 @@ async function checkDeposit(gameId, playerId, playerWallet, betAmount = DEFAULT_
 // Track pending payouts for manual processing if auto-payout fails
 const pendingPayouts = [];
 
-// Send XRS payout - builds Solana-compatible transaction
+// ===== Bincode / Transaction Encoding Helpers =====
+function u32LE(value) {
+    const buf = Buffer.alloc(4);
+    buf.writeUInt32LE(value, 0);
+    return buf;
+}
+
+function u64LE(value) {
+    const big = BigInt(value);
+    const buf = Buffer.alloc(8);
+    for (let i = 0; i < 8; i++) {
+        buf[i] = Number((big >> BigInt(i * 8)) & 0xFFn);
+    }
+    return buf;
+}
+
+function encodeString(str) {
+    const encoded = Buffer.from(str, 'utf8');
+    return Buffer.concat([u64LE(encoded.length), encoded]);
+}
+
+function encodeCompactU16(value) {
+    const out = [];
+    let v = value;
+    while (v >= 0x80) { out.push((v & 0x7f) | 0x80); v >>= 7; }
+    out.push(v & 0x7f);
+    return Buffer.from(out);
+}
+
+// Encode NativeTransfer instruction (variant 11) - for XRS coin transfers
+function encodeNativeTransfer(from, to, amountLamports) {
+    return Buffer.concat([
+        u32LE(11),              // variant index: NativeTransfer
+        encodeString(from),     // sender address
+        encodeString(to),       // recipient address
+        u64LE(amountLamports)   // amount in lamports
+    ]);
+}
+
+// Pad base58-decoded pubkey to exactly 32 bytes
+function padPubkey(decoded) {
+    if (decoded.length === 32) return Buffer.from(decoded);
+    const padded = Buffer.alloc(32, 0);
+    Buffer.from(decoded).copy(padded, 32 - decoded.length);
+    return padded;
+}
+
+// Build Solana legacy message
+function buildMessage(signerPubkey, instructionData, blockhash) {
+    const programId = Buffer.alloc(32, 0); // Pubkey::default()
+    return Buffer.concat([
+        Buffer.from([1, 0, 1]),             // header: 1 required sig, 0 readonly signed, 1 readonly unsigned
+        encodeCompactU16(2),                // 2 accounts
+        signerPubkey,                       // account[0] = signer
+        programId,                          // account[1] = program_id
+        blockhash,                          // 32 bytes recent blockhash
+        encodeCompactU16(1),                // 1 instruction
+        Buffer.from([1]),                   // program_id_index = 1 (account[1])
+        encodeCompactU16(1),                // 1 account reference in instruction
+        Buffer.from([0]),                   // account_index = 0 (signer)
+        encodeCompactU16(instructionData.length),
+        instructionData
+    ]);
+}
+
+// Build signed transaction in Solana wire format
+function assembleSignedTx(signature, messageBytes) {
+    return Buffer.concat([
+        encodeCompactU16(1),    // 1 signature
+        signature,              // 64-byte Ed25519 signature
+        messageBytes
+    ]);
+}
+
+// Fetch recent blockhash from node
+async function fetchRecentBlockhash() {
+    // Try JSON-RPC first (port 50008)
+    try {
+        const rpcData = await new Promise((resolve, reject) => {
+            const postData = JSON.stringify({
+                jsonrpc: '2.0', id: 1, method: 'getRecentBlockhash', params: []
+            });
+            const req = http.request({
+                hostname: '138.197.116.81',
+                port: XRS_EXPLORER_PORT,
+                path: '/',
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(postData)
+                },
+                timeout: 5000
+            }, (res) => {
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => {
+                    try { resolve(JSON.parse(data)); } catch (e) { reject(e); }
+                });
+            });
+            req.on('error', reject);
+            req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
+            req.write(postData);
+            req.end();
+        });
+
+        if (rpcData?.result?.value?.blockhash) {
+            const hex = rpcData.result.value.blockhash;
+            const bytes = Buffer.alloc(32);
+            for (let i = 0; i < 32; i++) bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+            console.log(`[BLOCKHASH] Got from RPC: ${hex.slice(0, 16)}...`);
+            return bytes;
+        }
+    } catch (e) {
+        console.log(`[BLOCKHASH] RPC failed: ${e.message}, trying REST...`);
+    }
+
+    // Fallback: REST /blocks on port 56001
+    const blocksData = await apiCall(XRS_NETWORK_PORT, '/blocks?limit=1');
+    if (Array.isArray(blocksData) && blocksData.length > 0 && blocksData[0].hash) {
+        const hash = blocksData[0].hash;
+        if (Array.isArray(hash) && hash.length === 32) {
+            console.log(`[BLOCKHASH] Got from REST /blocks`);
+            return Buffer.from(hash);
+        }
+    }
+
+    throw new Error('Could not fetch recent blockhash from either endpoint');
+}
+
+// Submit signed transaction to node
+function submitTransaction(tx_base64) {
+    return new Promise((resolve) => {
+        const postData = JSON.stringify({ tx_base64 });
+        const req = http.request({
+            hostname: '138.197.116.81',
+            port: XRS_NETWORK_PORT,
+            path: '/submit',
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(postData)
+            },
+            timeout: 15000
+        }, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+                try {
+                    const parsed = JSON.parse(data);
+                    // Node returns 200 even for errors - must check body
+                    if (parsed.error) {
+                        resolve({ ok: false, error: parsed.error, raw: data });
+                    } else if (parsed.status === 'ok' || parsed.signature) {
+                        resolve({ ok: true, signature: parsed.signature, raw: data });
+                    } else {
+                        resolve({ ok: false, error: 'Unknown response', raw: data });
+                    }
+                } catch (e) {
+                    resolve({ ok: false, error: 'Invalid JSON response', raw: data });
+                }
+            });
+        });
+        req.on('error', (e) => resolve({ ok: false, error: e.message }));
+        req.on('timeout', () => { req.destroy(); resolve({ ok: false, error: 'Request timeout' }); });
+        req.write(postData);
+        req.end();
+    });
+}
+
+// Send XRS payout using signed NativeTransfer transaction
 async function sendPayout(toAddress, amount, reason) {
     try {
         const nacl = require('tweetnacl');
         const bs58 = require('bs58');
-        
-        // Convert amount to lamports
-        const lamports = Math.floor(amount * LAMPORTS_PER_XRS);
-        
-        console.log(`[PAYOUT] Attempting ${amount} XRS to ${toAddress.slice(0,8)}... (${reason})`);
-        
-        // First try: Use airdrop endpoint (simpler, works from escrow funds indirectly)
-        // This is a workaround while we debug the /submit transaction format
-        const airdropUrl = `http://138.197.116.81:56001/airdrop/${toAddress}/${Math.floor(amount)}`;
-        console.log(`[PAYOUT] Trying airdrop: ${airdropUrl}`);
-        
-        return new Promise((resolve, reject) => {
-            http.get(airdropUrl, (res) => {
-                let data = '';
-                res.on('data', chunk => data += chunk);
-                res.on('end', () => {
-                    console.log(`[PAYOUT] Airdrop response: ${data}`);
-                    if (data.toLowerCase().includes('sent') || data.toLowerCase().includes('airdrop')) {
-                        console.log(`[PAYOUT] ✓ ${amount} XRS sent to ${toAddress.slice(0,8)}... via airdrop (${reason})`);
-                        resolve(true);
-                    } else {
-                        console.log(`[PAYOUT] Airdrop failed, trying signed transaction...`);
-                        // Fallback: try signed transaction
-                        sendSignedTransaction(toAddress, lamports, reason).then(resolve);
-                    }
-                });
-            }).on('error', (e) => {
-                console.log(`[PAYOUT] Airdrop error: ${e.message}, trying signed transaction...`);
-                sendSignedTransaction(toAddress, lamports, reason).then(resolve);
+
+        const lamports = BigInt(Math.floor(amount * LAMPORTS_PER_XRS));
+
+        console.log(`[PAYOUT] Sending ${amount} XRS (${lamports} lamports) to ${toAddress.slice(0,8)}... (${reason})`);
+
+        // 1. Encode NativeTransfer instruction (variant 11)
+        const instructionData = encodeNativeTransfer(escrowWallet.address, toAddress, lamports);
+
+        // 2. Fetch recent blockhash
+        const blockhash = await fetchRecentBlockhash();
+
+        // 3. Decode signer pubkey (pad to 32 bytes)
+        const signerPubkey = padPubkey(bs58.decode(escrowWallet.address));
+
+        // 4-5. Build message
+        const messageBytes = buildMessage(signerPubkey, instructionData, blockhash);
+
+        // 6. Sign with escrow private key
+        const secretKey = bs58.decode(escrowWallet.privateKey);
+        const signature = nacl.sign.detached(messageBytes, secretKey);
+
+        if (signature.length !== 64) {
+            throw new Error(`Bad signature length: ${signature.length}`);
+        }
+
+        // 7. Assemble signed transaction
+        const signedTx = assembleSignedTx(Buffer.from(signature), messageBytes);
+        const tx_base64 = signedTx.toString('base64');
+
+        console.log(`[PAYOUT] Signed TX: ${signedTx.length} bytes, base64: ${tx_base64.length} chars`);
+
+        // 8. Submit
+        const result = await submitTransaction(tx_base64);
+
+        if (result.ok) {
+            console.log(`[PAYOUT] SUCCESS: ${amount} XRS to ${toAddress.slice(0,8)}... sig=${result.signature} (${reason})`);
+            return true;
+        } else {
+            console.log(`[PAYOUT] FAILED: ${result.error} | raw: ${result.raw}`);
+            pendingPayouts.push({
+                to: toAddress,
+                amount: amount,
+                reason: reason,
+                timestamp: new Date().toISOString(),
+                error: result.error || result.raw
             });
-        });
+            console.log(`[PAYOUT] Added to pending payouts: ${amount} XRS to ${toAddress}`);
+            return false;
+        }
     } catch (e) {
         console.log(`[PAYOUT ERR] ${e.message}`);
         pendingPayouts.push({
@@ -472,112 +659,7 @@ async function sendPayout(toAddress, amount, reason) {
             timestamp: new Date().toISOString(),
             error: e.message
         });
-        console.log(`[PAYOUT] Manual payout needed: ${amount} XRS to ${toAddress}`);
-        return false;
-    }
-}
-
-// Signed transaction payout (backup method)
-async function sendSignedTransaction(toAddress, lamports, reason) {
-    try {
-        const nacl = require('tweetnacl');
-        const bs58 = require('bs58');
-        
-        // Get escrow keypair
-        const secretKey = bs58.decode(escrowWallet.privateKey);
-        const publicKey = bs58.decode(escrowWallet.address);
-        const toPublicKey = bs58.decode(toAddress);
-        
-        // System program address (all zeros)
-        const systemProgram = Buffer.alloc(32, 0);
-        
-        // Recent blockhash (32 bytes)
-        const recentBlockhash = Buffer.alloc(32, 0);
-        
-        // Transfer instruction data: [2 (u32 LE), amount (u64 LE)]
-        const instructionData = Buffer.alloc(12);
-        instructionData.writeUInt32LE(2, 0);
-        instructionData.writeBigUInt64LE(BigInt(lamports), 4);
-        
-        // Build the message
-        const message = Buffer.concat([
-            Buffer.from([1, 0, 1]),  // Header
-            Buffer.from([3]),        // 3 accounts
-            Buffer.from(publicKey),
-            Buffer.from(toPublicKey),
-            systemProgram,
-            recentBlockhash,
-            Buffer.from([1]),        // 1 instruction
-            Buffer.from([2]),        // program index
-            Buffer.from([2]),        // accounts length
-            Buffer.from([0, 1]),     // account indices
-            Buffer.from([instructionData.length]),
-            instructionData
-        ]);
-        
-        // Sign
-        const signature = nacl.sign.detached(message, secretKey);
-        
-        // Build transaction
-        const transaction = Buffer.concat([
-            Buffer.from([1]),
-            Buffer.from(signature),
-            message
-        ]);
-        
-        const tx_base64 = transaction.toString('base64');
-        const postData = JSON.stringify({ tx_base64 });
-        
-        console.log(`[PAYOUT] Signed TX size: ${transaction.length} bytes`);
-        
-        return new Promise((resolve) => {
-            const req = http.request({
-                hostname: '138.197.116.81',
-                port: 56001,
-                path: '/submit',
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Content-Length': Buffer.byteLength(postData)
-                }
-            }, (res) => {
-                let data = '';
-                res.on('data', chunk => data += chunk);
-                res.on('end', () => {
-                    console.log(`[PAYOUT] Submit response: ${data}`);
-                    if (data.toLowerCase().includes('submit') || data.toLowerCase().includes('success')) {
-                        resolve(true);
-                    } else {
-                        const amount = Number(lamports) / LAMPORTS_PER_XRS;
-                        pendingPayouts.push({
-                            to: toAddress,
-                            amount: amount,
-                            reason: reason,
-                            timestamp: new Date().toISOString(),
-                            error: data
-                        });
-                        console.log(`[PAYOUT] Manual payout needed: ${amount} XRS to ${toAddress}`);
-                        resolve(false);
-                    }
-                });
-            });
-            req.on('error', (e) => {
-                const amount = Number(lamports) / LAMPORTS_PER_XRS;
-                pendingPayouts.push({
-                    to: toAddress,
-                    amount: amount,
-                    reason: reason,
-                    timestamp: new Date().toISOString(),
-                    error: e.message
-                });
-                console.log(`[PAYOUT] Manual payout needed: ${amount} XRS to ${toAddress}`);
-                resolve(false);
-            });
-            req.write(postData);
-            req.end();
-        });
-    } catch (e) {
-        console.log(`[PAYOUT ERR] Signed TX: ${e.message}`);
+        console.log(`[PAYOUT] Added to pending payouts: ${amount} XRS to ${toAddress}`);
         return false;
     }
 }
@@ -586,7 +668,58 @@ async function sendSignedTransaction(toAddress, lamports, reason) {
 const server = http.createServer((req, res) => {
     // CORS headers for API
     res.setHeader('Access-Control-Allow-Origin', '*');
-    
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    // Handle CORS preflight
+    if (req.method === 'OPTIONS') {
+        res.writeHead(204);
+        res.end();
+        return;
+    }
+
+    // Proxy: Blockhash endpoint (for client-side WalletConnect tx building)
+    if (req.url === '/api/xeris/blockhash') {
+        fetchRecentBlockhash().then(bytes => {
+            // Return as hex string for easy client consumption
+            const hex = Buffer.from(bytes).toString('hex');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ blockhash: hex, format: 'hex' }));
+        }).catch(e => {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        });
+        return;
+    }
+
+    // Proxy: Submit signed transaction (for client-side WalletConnect deposits)
+    if (req.url === '/api/xeris/submit' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const { tx_base64 } = JSON.parse(body);
+                if (!tx_base64 || !/^[A-Za-z0-9+/]+=*$/.test(tx_base64)) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Invalid base64 encoding' }));
+                    return;
+                }
+                const result = await submitTransaction(tx_base64);
+                if (result.ok) {
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ status: 'ok', signature: result.signature }));
+                } else {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: result.error }));
+                }
+            } catch (e) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Invalid request body' }));
+            }
+        });
+        return;
+    }
+
     // API endpoints
     if (req.url === '/api/escrow') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
