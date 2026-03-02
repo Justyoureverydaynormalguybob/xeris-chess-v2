@@ -1592,8 +1592,8 @@
             <div class="prize-label">Per Game • Winner Takes 198 XRS</div>
         </div>
         
-        <input type="text" id="walletInput" placeholder="Enter your XRS wallet address">
         <button class="btn-gold" id="connectBtn" onclick="connectWallet()">⚡ Connect Wallet</button>
+        <p id="walletNotDetected" style="display:none; color:#ef4444; font-size:13px; text-align:center; margin-top:12px;">Open this page in the Xeris Wallet Browser to connect.</p>
     </div>
     
     <div class="card">
@@ -2398,66 +2398,57 @@ function handleReconnect(msg) {
 
 // Note: clearChat is defined above
 
-// Detect Xeris Wallet Browser and auto-connect
-async function detectXerisWallet() {
-    if (typeof window.xeris !== 'undefined') {
-        try {
-            // Try silent reconnect first
-            let resp;
-            try {
-                resp = await window.xeris.connect({ onlyIfTrusted: true });
-            } catch (e) {
-                // Not previously authorized - need explicit connect
-                return true; // wallet exists but need user action
-            }
-            const addr = extractWalletAddress(resp);
-            if (addr) {
-                xerisWalletAvailable = true;
-                document.getElementById('walletInput').value = addr;
-                document.getElementById('walletInput').disabled = true;
-                document.getElementById('connectBtn').textContent = '⚡ Connected via Xeris Wallet';
-                connectWallet();
-                return true;
-            }
-        } catch (e) {
-            console.log('[WALLET] Xeris wallet detection error:', e);
-        }
-        return true;
-    }
-    return false;
-}
-
+// Extract address from various wallet response formats
 function extractWalletAddress(resp) {
     if (typeof resp === 'string' && resp.length > 20) return resp;
     if (resp && resp.publicKey) return resp.publicKey.toString();
     if (resp && resp.address) return resp.address;
-    if (window.xeris.publicKey) return window.xeris.publicKey.toString();
-    if (window.xeris.address) return window.xeris.address;
+    if (window.xeris && window.xeris.publicKey) return window.xeris.publicKey.toString();
+    if (window.xeris && window.xeris.address) return window.xeris.address;
     return null;
 }
 
-async function connectWallet() {
-    let addr = document.getElementById('walletInput').value.trim();
-
-    // If Xeris Wallet Browser available and no address yet, do explicit connect
-    if (!addr && typeof window.xeris !== 'undefined') {
-        try {
-            const resp = await window.xeris.connect();
-            addr = extractWalletAddress(resp);
-            if (addr) {
-                xerisWalletAvailable = true;
-                document.getElementById('walletInput').value = addr;
-                document.getElementById('walletInput').disabled = true;
-            }
-        } catch (e) {
-            alert('Wallet connection cancelled');
-            return;
+// Try silent reconnect (no popup) if previously trusted
+async function detectXerisWallet() {
+    if (typeof window.xeris === 'undefined') return false;
+    try {
+        const resp = await window.xeris.connect({ onlyIfTrusted: true });
+        const addr = extractWalletAddress(resp);
+        if (addr) {
+            xerisWalletAvailable = true;
+            myWallet = addr;
+            document.getElementById('connectBtn').textContent = '⚡ Connected';
+            document.getElementById('connectBtn').disabled = true;
+            initWebSocket();
+            return true;
         }
+    } catch (e) {
+        // Not previously authorized — user must click connect
+    }
+    return true; // wallet exists, just needs explicit approval
+}
+
+async function connectWallet() {
+    if (typeof window.xeris === 'undefined') {
+        document.getElementById('walletNotDetected').style.display = 'block';
+        return;
     }
 
-    if (!addr || addr.length < 30) { alert('Enter a valid XRS wallet address'); return; }
-    myWallet = addr;
-    initWebSocket();
+    try {
+        const resp = await window.xeris.connect();
+        const addr = extractWalletAddress(resp);
+        if (!addr) {
+            alert('Could not get wallet address');
+            return;
+        }
+        xerisWalletAvailable = true;
+        myWallet = addr;
+        document.getElementById('connectBtn').textContent = '⚡ Connected';
+        document.getElementById('connectBtn').disabled = true;
+        initWebSocket();
+    } catch (e) {
+        alert('Wallet connection cancelled');
+    }
 }
 
 function setUsername() {
@@ -3290,36 +3281,33 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Detect Xeris Wallet Browser
     if (typeof window.xeris !== 'undefined') {
         xerisWalletAvailable = true;
-        const connectBtn = document.getElementById('connectBtn');
-        connectBtn.textContent = '⚡ Connect via Xeris Wallet';
         // Show retry deposit button for future use
         const retryBtn = document.getElementById('retryDepositBtn');
         if (retryBtn) retryBtn.style.display = 'block';
+    } else {
+        // Not in wallet browser — show warning
+        document.getElementById('walletNotDetected').style.display = 'block';
     }
 
     const saved = loadSession();
     if (saved?.wallet && saved?.username) {
         myWallet = saved.wallet; myUsername = saved.username;
         myStats = saved.stats || { wins: 0, losses: 0 };
-        document.getElementById('walletInput').value = myWallet;
 
-        // If in Xeris Wallet, verify the saved address matches
+        // If in Xeris Wallet, verify the saved address still matches
         if (xerisWalletAvailable) {
             try {
                 const resp = await window.xeris.connect({ onlyIfTrusted: true });
                 const walletAddr = extractWalletAddress(resp);
                 if (walletAddr && walletAddr !== myWallet) {
-                    // Wallet changed, update
                     myWallet = walletAddr;
-                    document.getElementById('walletInput').value = myWallet;
                 }
-                document.getElementById('walletInput').disabled = true;
-            } catch (e) { /* not trusted yet, that's fine */ }
+            } catch (e) { /* not trusted yet */ }
         }
 
         initWebSocket();
     } else if (xerisWalletAvailable) {
-        // Try auto-connect via Xeris Wallet
+        // Try silent auto-connect
         detectXerisWallet();
     }
 
