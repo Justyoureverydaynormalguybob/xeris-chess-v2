@@ -1164,120 +1164,6 @@
         @media (min-width: 900px) { .game-chat { max-width: 606px; } }
         @media (min-width: 1400px) { .game-chat { max-width: 686px; } }
         
-        /* PROMO MODAL */
-        .promo-modal {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.95);
-            z-index: 2000;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-            backdrop-filter: blur(15px);
-        }
-        .promo-modal.active { display: flex; }
-        .promo-content {
-            background: linear-gradient(135deg, var(--dark-2) 0%, var(--dark-1) 100%);
-            border: 2px solid var(--gold);
-            border-radius: 24px;
-            padding: 32px 24px;
-            max-width: 400px;
-            width: 100%;
-            text-align: center;
-            position: relative;
-            overflow: hidden;
-            box-shadow: 0 0 60px rgba(247,147,26,0.4);
-            animation: promoSlide 0.5s ease;
-        }
-        @keyframes promoSlide {
-            from { transform: scale(0.8) translateY(-30px); opacity: 0; }
-            to { transform: scale(1) translateY(0); opacity: 1; }
-        }
-        .promo-content::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0;
-            height: 3px;
-            background: linear-gradient(90deg, var(--gold), var(--green), var(--gold));
-        }
-        .promo-badge {
-            background: linear-gradient(135deg, #ef4444, #dc2626);
-            color: white;
-            padding: 6px 16px;
-            border-radius: 20px;
-            font-family: 'Orbitron', monospace;
-            font-size: 11px;
-            font-weight: 700;
-            letter-spacing: 2px;
-            display: inline-block;
-            margin-bottom: 16px;
-            animation: pulse-red 1s infinite;
-        }
-        .promo-icon {
-            font-size: 72px;
-            margin: 16px 0;
-            animation: bounce 2s ease infinite;
-        }
-        .promo-title {
-            font-family: 'Orbitron', monospace;
-            font-size: 26px;
-            font-weight: 900;
-            background: linear-gradient(135deg, var(--gold), var(--gold-light));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            letter-spacing: 2px;
-            margin-bottom: 8px;
-        }
-        .promo-subtitle {
-            font-size: 16px;
-            color: #888;
-            margin-bottom: 20px;
-        }
-        .promo-prize {
-            font-family: 'Orbitron', monospace;
-            font-size: 48px;
-            font-weight: 900;
-            color: var(--gold);
-            text-shadow: 0 0 40px rgba(247,147,26,0.6);
-            margin: 16px 0;
-        }
-        .promo-prize-label {
-            color: var(--green);
-            font-size: 14px;
-            font-weight: 700;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-        }
-        .promo-features {
-            margin: 24px 0;
-            text-align: left;
-        }
-        .promo-feature {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 0;
-            border-bottom: 1px solid var(--dark-4);
-            font-size: 14px;
-        }
-        .promo-feature:last-child { border-bottom: none; }
-        .promo-feature .icon { font-size: 20px; }
-        .promo-feature .text { color: #ccc; }
-        .promo-close {
-            background: transparent;
-            border: 1px solid #555;
-            color: #888;
-            padding: 12px 24px;
-            font-size: 14px;
-            margin-top: 8px;
-        }
-        .promo-close:hover {
-            border-color: var(--gold);
-            color: var(--gold);
-        }
-        
         /* LIVE GAME ITEM */
         .live-game-item {
             display: flex;
@@ -1674,29 +1560,6 @@
     </style>
 </head>
 <body>
-
-<!-- PROMO MODAL -->
-<div class="promo-modal" id="promoModal">
-    <div class="promo-content">
-        <button class="promo-close" onclick="closePromo()">✕</button>
-        <div class="promo-badge">🏆 COMING SOON</div>
-        <div class="promo-title">CHAMPIONSHIP<br>NIGHT</div>
-        <div class="promo-prize">
-            <span class="prize-amount">50,000</span>
-            <span class="prize-currency">XRS</span>
-        </div>
-        <div class="promo-subtitle">REAL XERIS PRIZE POOL</div>
-        <div class="promo-details">
-            <div class="promo-detail">🎮 8-16 Player Knockout</div>
-            <div class="promo-detail">⚔️ Winner Takes All</div>
-            <div class="promo-detail">📅 Date TBA</div>
-        </div>
-        <div class="promo-cta">
-            <p>Practice now & climb the leaderboard!</p>
-            <button class="btn-gold" onclick="closePromo()">🎯 Start Playing</button>
-        </div>
-    </div>
-</div>
 
 <!-- CONNECT WALLET SCREEN -->
 <div class="screen active" id="connectScreen">
@@ -2175,22 +2038,6 @@ function updateBetDisplay() {
     document.getElementById('winnerTakesDisplay').textContent = Math.floor(selectedBet * 2 * 0.99).toLocaleString();
 }
 
-// Promo modal
-let promoShown = false;
-
-function showPromo() {
-    if (promoShown) return;
-    // Check if already seen this session
-    if (sessionStorage.getItem('promoSeen')) return;
-    document.getElementById('promoModal').classList.add('active');
-}
-
-function closePromo() {
-    document.getElementById('promoModal').classList.remove('active');
-    promoShown = true;
-    sessionStorage.setItem('promoSeen', 'true');
-}
-
 // In-game chat
 let unreadChatCount = 0;
 let mobileChatOpen = false;
@@ -2551,8 +2398,6 @@ function handleReconnect(msg) {
 
 // Note: clearChat is defined above
 
-// Note: promo functions (showPromo, closePromo) are defined above
-
 // Detect Xeris Wallet Browser and auto-connect
 async function detectXerisWallet() {
     if (typeof window.xeris !== 'undefined') {
@@ -2640,8 +2485,6 @@ function handleMessage(msg) {
         case 'username_set':
             myStats = msg.stats || { wins: 0, losses: 0 };
             saveSession(); show('lobbyScreen'); updateMyInfo(); send({ type: 'get_lobby' });
-            // Show promo modal after first login
-            setTimeout(showPromo, 500);
             break;
         case 'lobby_update':
             updateLobby(msg.players, msg.leaderboard, msg.stats);
@@ -3443,9 +3286,6 @@ function retryAutoDeposit() {
 document.addEventListener('DOMContentLoaded', async () => {
     // Initialize radio
     initRadio();
-
-    // Show promo modal on first visit
-    showPromo();
 
     // Detect Xeris Wallet Browser
     if (typeof window.xeris !== 'undefined') {
