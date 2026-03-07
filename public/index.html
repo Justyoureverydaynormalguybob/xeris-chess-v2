@@ -1621,13 +1621,14 @@
     <div class="header" style="padding: 12px 0;">
         <div class="logo" style="font-size: 24px;"><span class="logo-icon" style="font-size: 28px;">♛</span> XERIS CHESS</div>
     </div>
-    
-    <div class="user-badge">
+
+    <div class="user-badge" style="position:relative;">
         <div class="user-avatar" id="myAvatar">?</div>
         <div>
             <div class="user-name" id="myUsername">Player</div>
             <div class="user-record" id="myRecord">0W - 0L</div>
         </div>
+        <button onclick="disconnectWallet()" style="position:absolute; right:0; top:50%; transform:translateY(-50%); background:transparent; border:1px solid #555; color:#888; padding:6px 12px; font-size:11px; width:auto; border-radius:8px;">Disconnect</button>
     </div>
     
     <div class="tabs">
@@ -1891,6 +1892,7 @@
             <div class="game-over-title" id="gameOverTitle">CHECKMATE!</div>
             <div class="game-over-result" id="gameOverResult">You Win!</div>
             <div class="game-over-prize" id="gameOverPrize">+198 XRS</div>
+            <p id="gameOverPayoutStatus" style="font-size:13px; margin-top:10px; color:#888;"></p>
             <button class="btn-gold" onclick="goToResults()" style="margin-top:20px;">View Results</button>
         </div>
     </div>
@@ -1957,6 +1959,7 @@
         <div class="result-text" id="resultText">VICTORY</div>
         <div class="result-prize" id="resultPrize">+198 XRS</div>
         <p style="color:#666; margin:16px 0;" id="resultReason">by checkmate</p>
+        <p id="resultPayoutStatus" style="font-size:13px; margin-bottom:16px; color:#888;"></p>
         <button class="btn-gold" onclick="backToLobby()">🏠 Return to Arena</button>
     </div>
 </div>
@@ -2419,13 +2422,14 @@ async function detectXerisWallet() {
             myWallet = addr;
             document.getElementById('connectBtn').textContent = '⚡ Connected';
             document.getElementById('connectBtn').disabled = true;
+            setupWalletListeners();
             initWebSocket();
             return true;
         }
     } catch (e) {
         // Not previously authorized — user must click connect
     }
-    return true; // wallet exists, just needs explicit approval
+    return false; // wallet exists but needs explicit approval
 }
 
 async function connectWallet() {
@@ -2445,10 +2449,64 @@ async function connectWallet() {
         myWallet = addr;
         document.getElementById('connectBtn').textContent = '⚡ Connected';
         document.getElementById('connectBtn').disabled = true;
+        setupWalletListeners();
         initWebSocket();
     } catch (e) {
         alert('Wallet connection cancelled');
     }
+}
+
+// Listen for wallet account changes and disconnects
+function setupWalletListeners() {
+    if (typeof window.xeris === 'undefined') return;
+
+    window.xeris.on('accountChanged', (newAddr) => {
+        const addr = extractWalletAddress(newAddr);
+        if (addr && addr !== myWallet) {
+            console.log('[WALLET] Account changed:', addr);
+            myWallet = addr;
+            // Clear old session, reconnect with new address
+            myUsername = null;
+            myStats = { wins: 0, losses: 0 };
+            localStorage.removeItem('xerisChess');
+            if (ws) { ws.close(); ws = null; }
+            initWebSocket();
+        }
+    });
+
+    window.xeris.on('disconnect', () => {
+        console.log('[WALLET] Wallet disconnected');
+        disconnectWallet();
+    });
+}
+
+function disconnectWallet() {
+    if (myGameId) { alert('Finish your current game first'); return; }
+
+    // Disconnect from Xeris Wallet
+    if (typeof window.xeris !== 'undefined') {
+        try { window.xeris.disconnect(); } catch (e) {}
+    }
+
+    // Close websocket
+    if (ws) { ws.close(); ws = null; }
+    stopHeartbeat();
+
+    // Clear state
+    myWallet = null;
+    myUsername = null;
+    myPlayerId = null;
+    myColor = null;
+    myGameId = null;
+    xerisWalletAvailable = false;
+    myStats = { wins: 0, losses: 0 };
+    localStorage.removeItem('xerisChess');
+    sessionStorage.removeItem('xerisGameState');
+
+    // Reset UI
+    document.getElementById('connectBtn').textContent = '⚡ Connect Wallet';
+    document.getElementById('connectBtn').disabled = false;
+    show('connectScreen');
 }
 
 function setUsername() {
@@ -2646,6 +2704,12 @@ async function autoDeposit(escrowAddr, betAmount) {
     statusEl.innerHTML = '🔄 Signing deposit transaction...';
 
     try {
+        // Ensure wallet is still connected
+        if (window.xeris.isConnected === false) {
+            const resp = await window.xeris.connect();
+            const addr = extractWalletAddress(resp);
+            if (addr) myWallet = addr;
+        }
         // 1. Encode NativeTransfer instruction
         const lamports = BigInt(betAmount) * BigInt(LAMPORTS_PER_XRS);
         const instructionData = XerisTx.encodeNativeTransfer(myWallet, escrowAddr, lamports);
@@ -2852,6 +2916,18 @@ function showResult(msg) {
     // Hide check alert
     document.getElementById('checkAlert').style.display = 'none';
     
+    // Show payout status for winner
+    const payoutEl = document.getElementById('gameOverPayoutStatus');
+    if (won && msg.payoutSuccess) {
+        payoutEl.textContent = '✅ Prize sent to your wallet';
+        payoutEl.style.color = 'var(--green)';
+    } else if (won && msg.payoutSuccess === false) {
+        payoutEl.textContent = '⏳ Prize payout pending — contact admin if not received';
+        payoutEl.style.color = 'var(--gold)';
+    } else {
+        payoutEl.textContent = '';
+    }
+
     // Show overlay
     document.getElementById('gameOverOverlay').classList.add('active');
 }
@@ -2870,7 +2946,18 @@ function goToResults() {
     document.getElementById('resultPrize').textContent = won ? '+' + msg.prize + ' XRS' : (msg.winner === 'draw' ? '+' + msg.prize + ' XRS' : '-' + lostAmount + ' XRS');
     document.getElementById('resultPrize').className = 'result-prize ' + (won || msg.winner === 'draw' ? 'win' : 'lose');
     document.getElementById('resultReason').textContent = 'by ' + msg.reason;
-    
+
+    const payoutStatusEl = document.getElementById('resultPayoutStatus');
+    if (won && msg.payoutSuccess) {
+        payoutStatusEl.textContent = '✅ Prize sent to your wallet';
+        payoutStatusEl.style.color = 'var(--green)';
+    } else if (won && msg.payoutSuccess === false) {
+        payoutStatusEl.textContent = '⏳ Prize payout pending — contact admin if not received';
+        payoutStatusEl.style.color = 'var(--gold)';
+    } else {
+        payoutStatusEl.textContent = '';
+    }
+
     pendingResult = null;
     show('resultScreen');
 }
@@ -3278,37 +3365,56 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initialize radio
     initRadio();
 
-    // Detect Xeris Wallet Browser
-    if (typeof window.xeris !== 'undefined') {
-        xerisWalletAvailable = true;
-        // Show retry deposit button for future use
-        const retryBtn = document.getElementById('retryDepositBtn');
-        if (retryBtn) retryBtn.style.display = 'block';
-    } else {
-        // Not in wallet browser — show warning
-        document.getElementById('walletNotDetected').style.display = 'block';
+    // Try to detect wallet — it may inject after DOMContentLoaded
+    async function initWallet() {
+        if (typeof window.xeris !== 'undefined') {
+            xerisWalletAvailable = true;
+            const retryBtn = document.getElementById('retryDepositBtn');
+            if (retryBtn) retryBtn.style.display = 'block';
+
+            const saved = loadSession();
+            if (saved?.wallet && saved?.username) {
+                myWallet = saved.wallet; myUsername = saved.username;
+                myStats = saved.stats || { wins: 0, losses: 0 };
+
+                // Verify the saved address still matches
+                try {
+                    const resp = await window.xeris.connect({ onlyIfTrusted: true });
+                    const walletAddr = extractWalletAddress(resp);
+                    if (walletAddr && walletAddr !== myWallet) {
+                        myWallet = walletAddr;
+                    }
+                    setupWalletListeners();
+                } catch (e) { /* not trusted yet */ }
+
+                initWebSocket();
+            } else {
+                // Try silent auto-connect
+                detectXerisWallet();
+            }
+            return true;
+        }
+        return false;
     }
 
-    const saved = loadSession();
-    if (saved?.wallet && saved?.username) {
-        myWallet = saved.wallet; myUsername = saved.username;
-        myStats = saved.stats || { wins: 0, losses: 0 };
-
-        // If in Xeris Wallet, verify the saved address still matches
-        if (xerisWalletAvailable) {
-            try {
-                const resp = await window.xeris.connect({ onlyIfTrusted: true });
-                const walletAddr = extractWalletAddress(resp);
-                if (walletAddr && walletAddr !== myWallet) {
-                    myWallet = walletAddr;
-                }
-            } catch (e) { /* not trusted yet */ }
+    // Try immediately
+    if (!await initWallet()) {
+        // Wallet may inject slightly after page load — wait up to 500ms
+        const saved = loadSession();
+        if (saved?.wallet && saved?.username) {
+            // Have a saved session — connect immediately, wallet detection can happen later
+            myWallet = saved.wallet; myUsername = saved.username;
+            myStats = saved.stats || { wins: 0, losses: 0 };
+            initWebSocket();
         }
 
-        initWebSocket();
-    } else if (xerisWalletAvailable) {
-        // Try silent auto-connect
-        detectXerisWallet();
+        setTimeout(async () => {
+            if (!xerisWalletAvailable) {
+                if (await initWallet()) return;
+                // No wallet found after waiting
+                document.getElementById('walletNotDetected').style.display = 'block';
+            }
+        }, 500);
     }
 
     fetch('/api/stats').then(r => r.json()).then(d => {

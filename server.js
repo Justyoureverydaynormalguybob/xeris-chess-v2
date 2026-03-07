@@ -263,14 +263,66 @@ function base58Encode(bytes) {
     return result || '1';
 }
 
+// Parse amount from instruction data bytes (handles both NativeTransfer variant 11 and old variant 2)
+function parseTransferAmount(data) {
+    if (!data || data.length < 4) return 0;
+
+    // Handle nested data format: [[count], ...bytes]
+    if (Array.isArray(data[0]) && data[0].length === 1) {
+        data = data.slice(1);
+    }
+
+    // Read variant index as u32LE (first 4 bytes)
+    const variant = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
+
+    if (variant === 11) {
+        // NativeTransfer: u32LE(11) + string(from) + string(to) + u64LE(amount)
+        // String encoding: u64LE(len) + utf8 bytes
+        let offset = 4;
+
+        // Skip 'from' string: read u64LE length, then skip that many bytes
+        if (offset + 8 > data.length) return 0;
+        let fromLen = 0;
+        for (let i = 0; i < 8; i++) fromLen += (data[offset + i] || 0) * Math.pow(256, i);
+        offset += 8 + fromLen;
+
+        // Skip 'to' string
+        if (offset + 8 > data.length) return 0;
+        let toLen = 0;
+        for (let i = 0; i < 8; i++) toLen += (data[offset + i] || 0) * Math.pow(256, i);
+        offset += 8 + toLen;
+
+        // Read amount as u64LE
+        if (offset + 8 > data.length) return 0;
+        let lamports = BigInt(0);
+        for (let i = 7; i >= 0; i--) {
+            lamports = lamports * 256n + BigInt(data[offset + i] || 0);
+        }
+        return Number(lamports) / LAMPORTS_PER_XRS;
+    }
+
+    if (variant === 2 || data[0] === 2) {
+        // Old transfer format: opcode 2 at byte 0, amount at bytes 4-11
+        if (data.length >= 12) {
+            let lamports = BigInt(0);
+            for (let i = 11; i >= 4; i--) {
+                lamports = lamports * 256n + BigInt(data[i] || 0);
+            }
+            return Number(lamports) / LAMPORTS_PER_XRS;
+        }
+    }
+
+    return 0;
+}
+
 // Fetch and parse transactions from blocks to find deposits
 async function findDepositTransaction(playerWallet, minAmount) {
     try {
         console.log(`[DEPOSIT] Searching for ${minAmount} XRS from ${playerWallet.slice(0,8)}... to escrow`);
-        
+
         // Fetch blocks from explorer API
         const url = `${XRS_NODE}:${XRS_EXPLORER_PORT}/blocks`;
-        
+
         const response = await new Promise((resolve, reject) => {
             http.get(url, (res) => {
                 let data = '';
@@ -278,7 +330,7 @@ async function findDepositTransaction(playerWallet, minAmount) {
                 res.on('end', () => resolve(data));
             }).on('error', e => reject(e));
         });
-        
+
         let blocks;
         try {
             blocks = JSON.parse(response);
@@ -289,33 +341,30 @@ async function findDepositTransaction(playerWallet, minAmount) {
                 blocks = JSON.parse(response.substring(0, lastBracket + 2));
             } else {
                 console.log(`[DEPOSIT] Failed to parse blocks JSON`);
-                return false;
+                return null;
             }
         }
-        
+
         if (!Array.isArray(blocks) || blocks.length === 0) {
             console.log(`[DEPOSIT] No blocks returned`);
-            return false;
+            return null;
         }
-        
+
         // Sort by slot descending (newest first)
         blocks.sort((a, b) => (b.slot || 0) - (a.slot || 0));
-        
-        const minLamports = minAmount * LAMPORTS_PER_XRS;
-        let foundTx = null;
-        
+
         // Scan through blocks looking for matching transaction
         for (const block of blocks.slice(0, 50)) { // Check last 50 blocks
             if (!block.transactions || !Array.isArray(block.transactions)) continue;
-            
+
             for (const tx of block.transactions) {
                 try {
                     const accountKeys = tx.message?.accountKeys;
-                    if (!accountKeys || accountKeys.length < 3) continue;
-                    
-                    // Parse account keys - format: [[count], [from_bytes], [to_bytes], [program_bytes]]
+                    if (!accountKeys || accountKeys.length < 2) continue;
+
+                    // Parse account keys - format varies
                     let fromAddr = '', toAddr = '';
-                    
+
                     // Check if first element is a count array
                     if (Array.isArray(accountKeys[0]) && accountKeys[0].length === 1) {
                         // Format: [[count], [addr1], [addr2], ...]
@@ -334,56 +383,90 @@ async function findDepositTransaction(playerWallet, minAmount) {
                             toAddr = base58Encode(new Uint8Array(accountKeys[1]));
                         }
                     }
-                    
+
                     // Check if this is a transfer FROM player TO escrow
                     if (fromAddr !== playerWallet || toAddr !== escrowWallet.address) {
-                        continue;
+                        // NativeTransfer embeds from/to in instruction data, not just account keys
+                        // Check instruction data for embedded addresses if account key match fails
+                    } else {
+                        // Account keys match — parse amount from instruction data
+                        const instructions = tx.message?.instructions;
+                        if (!instructions) continue;
+
+                        const instrList = Array.isArray(instructions[0]) && instructions[0].length === 1
+                            ? instructions.slice(1)
+                            : instructions;
+
+                        for (const instr of instrList) {
+                            if (!instr || typeof instr !== 'object') continue;
+                            const data = instr.data;
+                            if (!data) continue;
+
+                            const amount = parseTransferAmount(data);
+
+                            if (amount >= minAmount) {
+                                console.log(`[DEPOSIT] Found TX: ${fromAddr.slice(0,8)}... -> ${toAddr.slice(0,8)}... = ${amount} XRS (slot ${block.slot})`);
+                                return { from: fromAddr, to: toAddr, amount, slot: block.slot };
+                            }
+                        }
                     }
-                    
-                    // Parse amount from instruction data
-                    // Format: instructions: [[count], {programIdIndex, accounts, data: [[count], 2, 0, 0, 0, ...amount_bytes...]}]
+
+                    // Fallback: parse NativeTransfer instruction data for embedded from/to addresses
                     const instructions = tx.message?.instructions;
                     if (!instructions) continue;
-                    
-                    let amount = 0;
-                    const instrList = Array.isArray(instructions[0]) && instructions[0].length === 1 
-                        ? instructions.slice(1) 
+
+                    const instrList = Array.isArray(instructions[0]) && instructions[0].length === 1
+                        ? instructions.slice(1)
                         : instructions;
-                    
+
                     for (const instr of instrList) {
                         if (!instr || typeof instr !== 'object') continue;
-                        
                         let data = instr.data;
                         if (!data) continue;
-                        
-                        // Handle nested data format: [[count], 2, 0, 0, 0, ...bytes...]
+
                         if (Array.isArray(data[0]) && data[0].length === 1) {
                             data = data.slice(1);
                         }
-                        
-                        // Transfer instruction: data[0] = 2 (transfer opcode)
-                        // Amount is in bytes 4-11 (little-endian u64)
-                        if (data.length >= 12 && data[0] === 2) {
-                            // Read little-endian u64 from bytes 4-11
-                            let lamports = BigInt(0);
-                            for (let i = 11; i >= 4; i--) {
-                                lamports = lamports * BigInt(256) + BigInt(data[i] || 0);
-                            }
-                            amount = Number(lamports) / LAMPORTS_PER_XRS;
+
+                        // Check if this is NativeTransfer (variant 11)
+                        if (data.length < 4) continue;
+                        const variant = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
+                        if (variant !== 11) continue;
+
+                        // Parse from string
+                        let offset = 4;
+                        if (offset + 8 > data.length) continue;
+                        let fromLen = 0;
+                        for (let i = 0; i < 8; i++) fromLen += (data[offset + i] || 0) * Math.pow(256, i);
+                        offset += 8;
+                        if (offset + fromLen > data.length) continue;
+                        const embeddedFrom = String.fromCharCode(...data.slice(offset, offset + fromLen));
+                        offset += fromLen;
+
+                        // Parse to string
+                        if (offset + 8 > data.length) continue;
+                        let toLen = 0;
+                        for (let i = 0; i < 8; i++) toLen += (data[offset + i] || 0) * Math.pow(256, i);
+                        offset += 8;
+                        if (offset + toLen > data.length) continue;
+                        const embeddedTo = String.fromCharCode(...data.slice(offset, offset + toLen));
+                        offset += toLen;
+
+                        // Check addresses match
+                        if (embeddedFrom !== playerWallet || embeddedTo !== escrowWallet.address) continue;
+
+                        // Parse amount
+                        if (offset + 8 > data.length) continue;
+                        let lamports = BigInt(0);
+                        for (let i = 7; i >= 0; i--) {
+                            lamports = lamports * 256n + BigInt(data[offset + i] || 0);
                         }
-                    }
-                    
-                    console.log(`[DEPOSIT] Found TX: ${fromAddr.slice(0,8)}... -> ${toAddr.slice(0,8)}... = ${amount} XRS`);
-                    
-                    if (amount >= minAmount) {
-                        foundTx = {
-                            from: fromAddr,
-                            to: toAddr,
-                            amount: amount,
-                            slot: block.slot
-                        };
-                        console.log(`[DEPOSIT] ✓ Valid deposit found in slot ${block.slot}!`);
-                        return foundTx;
+                        const amount = Number(lamports) / LAMPORTS_PER_XRS;
+
+                        if (amount >= minAmount) {
+                            console.log(`[DEPOSIT] Found NativeTransfer TX: ${embeddedFrom.slice(0,8)}... -> ${embeddedTo.slice(0,8)}... = ${amount} XRS (slot ${block.slot})`);
+                            return { from: embeddedFrom, to: embeddedTo, amount, slot: block.slot };
+                        }
                     }
                 } catch (txErr) {
                     // Skip malformed transactions
@@ -391,7 +474,7 @@ async function findDepositTransaction(playerWallet, minAmount) {
                 }
             }
         }
-        
+
         console.log(`[DEPOSIT] No matching transaction found`);
         return null;
     } catch (e) {
@@ -400,27 +483,47 @@ async function findDepositTransaction(playerWallet, minAmount) {
     }
 }
 
+// Fallback: check if escrow balance increased (balance-based deposit detection)
+async function checkDepositByBalance(gameId, betAmount) {
+    const currentBalance = await getBalance(escrowWallet.address);
+    const expectedIncrease = betAmount;
+
+    if (currentBalance >= lastEscrowBalance + expectedIncrease) {
+        console.log(`[DEPOSIT] Balance-based detection: ${lastEscrowBalance} -> ${currentBalance} XRS (+${currentBalance - lastEscrowBalance})`);
+        lastEscrowBalance = currentBalance;
+        return true;
+    }
+    return false;
+}
+
 // Track confirmed deposits to avoid double-counting
 const confirmedDeposits = new Map(); // "gameId:playerId" -> slot number
 
 // Check for incoming deposit from specific player
 async function checkDeposit(gameId, playerId, playerWallet, betAmount = DEFAULT_BET_AMOUNT) {
     const depositKey = `${gameId}:${playerId}`;
-    
+
     // Already confirmed this deposit?
     if (confirmedDeposits.has(depositKey)) {
         return true;
     }
-    
-    // Search for transaction from player to escrow
+
+    // Primary: search for transaction from player to escrow in recent blocks
     const tx = await findDepositTransaction(playerWallet, betAmount);
-    
+
     if (tx) {
-        // Mark as confirmed so we don't count it again
         confirmedDeposits.set(depositKey, tx.slot);
         return true;
     }
-    
+
+    // Fallback: check if escrow balance increased by at least betAmount
+    const balanceMatch = await checkDepositByBalance(gameId, betAmount);
+    if (balanceMatch) {
+        confirmedDeposits.set(depositKey, 'balance-check');
+        console.log(`[DEPOSIT] Confirmed via balance check for ${playerWallet.slice(0,8)}...`);
+        return true;
+    }
+
     return false;
 }
 
@@ -637,6 +740,8 @@ async function sendPayout(toAddress, amount, reason) {
 
         if (result.ok) {
             console.log(`[PAYOUT] SUCCESS: ${amount} XRS to ${toAddress.slice(0,8)}... sig=${result.signature} (${reason})`);
+            // Update tracked balance so deposit detection stays accurate
+            lastEscrowBalance = Math.max(0, lastEscrowBalance - amount);
             return true;
         } else {
             console.log(`[PAYOUT] FAILED: ${result.error} | raw: ${result.raw}`);
@@ -1850,10 +1955,11 @@ async function endGame(gameId, result, reason) {
             await sendPayout(DEV_WALLET, fee, 'fee');
         }
     } else if (result === 'draw' && game.pot > 0) {
-        // Refund both on draw
-        const refund = Math.floor(game.pot / 2);
-        if (game.whiteWallet) await sendPayout(game.whiteWallet, refund, 'draw-refund');
-        if (game.blackWallet) await sendPayout(game.blackWallet, refund, 'draw-refund');
+        // Refund both on draw — give remainder to white to avoid losing lamports
+        const halfPot = Math.floor(game.pot / 2);
+        const remainder = game.pot - halfPot * 2;
+        if (game.whiteWallet) await sendPayout(game.whiteWallet, halfPot + remainder, 'draw-refund');
+        if (game.blackWallet) await sendPayout(game.blackWallet, halfPot, 'draw-refund');
         payoutSuccess = true;
     }
     
